@@ -1,0 +1,4 @@
+name = "blueprint"
+uuid = "c1615a0c-c255-402d-ae34-0b88819b43c6"
+authors = ["Jonas Östlund <uppfinnarjonas@gmail.com>"]
+version = "0.1.0"
