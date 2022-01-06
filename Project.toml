@@ -2,3 +2,6 @@ name = "blueprint"
 uuid = "c1615a0c-c255-402d-ae34-0b88819b43c6"
 authors = ["Jonas Östlund <uppfinnarjonas@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+FunctionalCollections = "de31a74c-ac4f-5751-b3fd-e18cd04993ca"
