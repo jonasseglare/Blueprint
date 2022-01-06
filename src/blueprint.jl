@@ -57,7 +57,10 @@ function beam_factory(prefix::String, specs::BeamSpecs)
 end
 
 struct Polyhedron
-    transform::RigidTransform{Float64}
+end
+
+function polyhedron_from_planes()
+    Polyhedron()
 end
 
 struct Beam
@@ -67,7 +70,7 @@ struct Beam
 end
 
 function new_beam(name::String, specs::BeamSpecs)
-    p = Polyhedron(identity_3d_transform)
+    p = Polyhedron()
     Beam(name, specs, p)
 end
 
