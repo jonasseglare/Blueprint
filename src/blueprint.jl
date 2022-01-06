@@ -25,6 +25,11 @@ struct BeamSpecs
     height::Real # along Y
 end
 
+function conventional_specs(specs::BeamSpecs)
+    return specs.width <= specs.height
+end
+
+### Rigid transforms
 struct RigidTransform{T}
     rotation::Matrix{T}
     translation::Vector{T}
@@ -36,10 +41,7 @@ end
 
 const identity_3d_transform = identity_rigid_transform(3)
     
-
-function conventional_specs(specs::BeamSpecs)
-    return specs.width <= specs.height
-end
+### Beams
 
 mutable struct BeamFactory
     prefix::String
