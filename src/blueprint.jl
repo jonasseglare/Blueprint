@@ -56,14 +56,19 @@ function beam_factory(prefix::String, specs::BeamSpecs)
     BeamFactory(prefix, specs, 0)
 end
 
-struct Beam
-    name::String
-    specs::BeamSpecs
+struct Polyhedron
     transform::RigidTransform{Float64}
 end
 
+struct Beam
+    name::String
+    specs::BeamSpecs
+    polyhedron::Polyhedron
+end
+
 function new_beam(name::String, specs::BeamSpecs)
-    Beam(name, specs, identity_3d_transform)
+    p = Polyhedron(identity_3d_transform)
+    Beam(name, specs, p)
 end
 
 function new_beam!(factory::BeamFactory)
