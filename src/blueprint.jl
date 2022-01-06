@@ -25,6 +25,18 @@ struct BeamSpecs
     height::Real # along Y
 end
 
+struct RigidTransform{T}
+    rotation::Matrix{T}
+    translation::Vector{T}
+end
+
+function identity_rigid_transform(N::Integer)
+    RigidTransform(Matrix(1.0I, N, N), zeros(N))
+end
+
+const identity_3d_transform = identity_rigid_transform(3)
+    
+
 function conventional_specs(specs::BeamSpecs)
     return specs.width <= specs.height
 end
@@ -45,10 +57,15 @@ end
 struct Beam
     name::String
     specs::BeamSpecs
+    transform::RigidTransform{Float64}
+end
+
+function new_beam(name::String, specs::BeamSpecs)
+    Beam(name, specs, identity_3d_transform)
 end
 
 function new_beam!(factory::BeamFactory)
-    result = Beam(string(factory.prefix, string(factory.counter)), factory.specs)
+    result = new_beam(string(factory.prefix, string(factory.counter)), factory.specs)
     factory.counter += 1
     result
 end

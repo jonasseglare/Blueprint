@@ -24,4 +24,5 @@ end
     f = blueprint.beam_factory("Mjao", specs)
     beam = blueprint.new_beam!(f)
     @test beam.name == "Mjao0"
+    @test f.counter == 1
 end
