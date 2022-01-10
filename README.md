@@ -10,8 +10,9 @@ generate blueprint
 ```
 
 
-### In the REPL
+### In Emacs
 
+`C-c C-p` : start REPL
 `C-c C-a` : activate this project
 `C-c C-b` : load module
 

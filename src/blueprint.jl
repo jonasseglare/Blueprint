@@ -1,5 +1,6 @@
 module blueprint
 
+using FunctionalCollections
 using LinearAlgebra
 
 ### Planes
@@ -12,6 +13,27 @@ end
 
 function plane_at_pos(normal::Vector{T}, pos::Vector{T}) where {T}
     Plane(normal, dot(pos, normal))
+end
+
+function evaluate(plane::Plane{T}, pos::Vector{T}) where {T}
+    return dot(plane.normal, pos) - plane.offset
+end
+
+## Line
+
+struct ParameterizedLine{T}
+    pos::Vector{T}
+    dir::Vector{T}
+end
+
+function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothing} where {T}
+    dir = cross(a.normal, b.normal)
+    if norm(dir) <= 0.0
+        return nothing
+    end
+
+    origin = hcat(a.normal, b.normal, dir)\[a.offset, b.offset, 0.0]
+    return ParameterizedLine{T}(origin, dir)
 end
 
 ### Beams
@@ -56,11 +78,64 @@ function beam_factory(prefix::String, specs::BeamSpecs)
     BeamFactory(prefix, specs, 0)
 end
 
+# A polyhedron is defined by the half spaces of a set of planes. The half space of a plane is the space in
+# the positive direction of the normal.
 struct Polyhedron
 end
 
-function polyhedron_from_planes()
-    Polyhedron()
+function ordered_pair(a::Symbol, b::Symbol)::Tuple{Symbol,Symbol}
+    if a < b
+        (a, b)
+    else
+        (b, a)
+    end
+end
+
+struct LineBounds
+    line::ParameterizedLine{Float64}
+    exists::Bool
+    min::Union{Float64,Nothing}
+    max::Union{Float64,Nothing}
+end
+
+function initialize_line_bounds(line::ParameterizedLine{Float64})
+    return LineBounds(line, true, nothing, nothing)
+end
+
+function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float64)::Bool
+    if !dst.exists
+        return false
+    end
+
+    nd = dot(dst.line.dir, plane.normal)
+    if abs(nd) < marg
+    else
+    end
+    
+    return dst.exists
+end
+
+function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}}, marg::Float64=1.0e-6)
+    all_plane_intersections = Dict{Tuple{Symbol,Symbol}, ParameterizedLine{Float64}}()
+    for x in plane_map
+        for y in plane_map
+            line = intersect(x.second, y.second)
+            if line != nothing
+                all_plane_intersections[ordered_pair(x.first, y.first)] = line
+            end
+        end
+    end
+
+    for ((p0, p1), line) in all_plane_intersections
+        is_included = true
+        bounds = initialize_line_bounds(line)
+        for (plane_key, plane) in plane_map
+            if plane_key != p0 && plane_key != p1
+                println("------------UPDATE-----------")
+                bounds = update_line_bounds(bounds, plane, marg)
+            end
+        end
+    end
 end
 
 struct Beam

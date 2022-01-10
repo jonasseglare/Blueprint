@@ -7,6 +7,9 @@
 using Test
 include("../src/blueprint.jl")
 
+using FunctionalCollections
+using LinearAlgebra
+
 import .blueprint
 
 @testset "Plane tests" begin
@@ -17,6 +20,30 @@ import .blueprint
     @test plane.normal[1] == 1.0
     @test plane.normal[2] == 2.0
     @test plane.offset == 68.0
+    @test blueprint.evaluate(plane, [10, 11, 12]) == 0.0
+    @test blueprint.evaluate(plane, [11, 13, 15]) == 14.0
+    @test blueprint.evaluate(plane, [9, 9, 9]) == -14.0
+end
+
+@testset "Plane intersection" begin
+    bp = blueprint
+    a = bp.Plane([1.0, 0.0, 0.0], 0.0)
+    b = bp.Plane([0.0, 1.0, 0.0], 0.0)
+    line = bp.intersect(a, b)
+    @test norm(line.dir - [0, 0, 1.0]) < 1.0e-6
+    @test norm(line.pos - [0, 0, 0]) < 1.0e-6
+    #if line == nothing
+    #    print("Nothing")
+    #end
+end
+
+@testset "Polyhedron tests" begin
+    bp = blueprint
+    planes = @Persistent Dict(:a => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+                              :b => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+                              :c => bp.plane_at_pos([-1.0, -1.0, 0.0], [0.5, 0.5, 0.0]))
+    polyhedron = bp.polyhedron_from_planes(planes)
+    print(polyhedron)
 end
 
 @testset "Beam tests" begin
