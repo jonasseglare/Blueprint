@@ -2,10 +2,10 @@
 
 # Run tests either by
 #  1. C-c C-b from emacs
-#  2. Command line: julia test/test_blueprint.jl
+#  2. Command line: julia test/runtests.jl
 
 using Test
-#include("../src/blueprint.jl") # Alternative 1
+#include("../src/Blueprint.jl") # Alternative 1
 using Blueprint               # Alternative 2
 using FunctionalCollections
 using LinearAlgebra

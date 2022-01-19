@@ -1,4 +1,4 @@
-# blueprint
+# Blueprint
 
 ## How to work with the project (personal notes)
 
@@ -8,7 +8,7 @@ Start new project:
 ```
 julia
 ]
-generate blueprint
+generate Blueprint
 ```
 ### Install package
 Type this:
