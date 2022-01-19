@@ -63,6 +63,27 @@ end
                               :b => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
                               :c => bp.plane_at_pos([-1.0, -1.0, 0.0], [0.5, 0.5, 0.0]))
     polyhedron = bp.polyhedron_from_planes(planes)
+
+    @test 3 == length(polyhedron.planes)
+    @test 3 == length(polyhedron.bounded_lines)
+    @test 0 == length(polyhedron.corners)
+end
+
+@testset "Polyhedron tests 2" begin
+    bp = blueprint
+    planes = @Persistent Dict(:x => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+                              :y => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+                              :z => bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]),
+                              :xyz => bp.plane_at_pos([-1.0, -1.0, -1.0], [1.0, 0.0, 0.0]))
+                              
+    polyhedron = bp.polyhedron_from_planes(planes)
+
+    @test 4 == length(polyhedron.planes)
+    @test 6 == length(polyhedron.bounded_lines)
+    @test 4 == length(polyhedron.corners)
+
+    @test [0.0, 0.0, 0.0] == polyhedron.corners[(:x, :y, :z)]
+    @test [0.0, 0.0, 1.0] == polyhedron.corners[(:x, :xyz, :y)]
 end
 
 @testset "Beam tests" begin
