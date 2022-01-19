@@ -32,9 +32,17 @@ end
     line = bp.intersect(a, b)
     @test norm(line.dir - [0, 0, 1.0]) < 1.0e-6
     @test norm(line.pos - [0, 0, 0]) < 1.0e-6
-    #if line == nothing
-    #    print("Nothing")
-    #end
+end
+
+@testset "Plane intersection 2" begin
+    bp = blueprint
+    a = bp.plane_at_pos([-1.0, 2.0, 0.0], [0.0, 0.0, 0.0])
+    b = bp.plane_at_pos([10.0, 0.0, 0.0], [2.0, 0.0, 0.0])
+    line = bp.intersect(b, a)
+    @test line.dir[1] == 0.0
+    @test line.dir[2] == 0.0
+    @test 0 < line.dir[3]
+    @test norm(line.pos - [2.0, 1.0, 0.0]) < 1.0e-6
 end
 
 @testset "Polyhedron tests" begin

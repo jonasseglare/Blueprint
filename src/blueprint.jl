@@ -37,7 +37,8 @@ function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothin
         return nothing
     end
 
-    origin = hcat(a.normal, b.normal, dir)\[a.offset, b.offset, 0.0]
+    # Find the point that satisfies the plane equations and 
+    origin = (hcat(a.normal, b.normal, dir)')\[a.offset, b.offset, 0.0]
     return ParameterizedLine{T}(dir, origin)
 end
 
@@ -189,6 +190,10 @@ function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float6
         end
     end
 
+
+    plane_intersections = Dict{Tuple{Symbol,Symbol}, ParameterizedLine{Float64}}()
+    
+    # For all lines, remove lines that don't exist because of other planes
     for ((p0, p1), line) in all_plane_intersections
         is_included = true
         bounds = initialize_line_bounds(line)
@@ -197,7 +202,17 @@ function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float6
                 bounds = update_line_bounds(bounds, plane, marg)
             end
         end
+
+        println(string(">> Line bounds: ", bounds))
+        
+        if bounds.exists
+            plane_intersections[(p0, p1)] = line
+        end
     end
+
+    println(string("Line segment filtering from ",
+                   length(all_plane_intersections), " to ",
+                   length(plane_intersections)))
 end
 
 struct Beam
