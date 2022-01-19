@@ -125,22 +125,47 @@ function initialize_line_bounds(line::ParameterizedLine{Float64})
     return LineBounds(line, true, nothing, nothing)
 end
 
+function check_existence(bds::LineBounds)
+    if bds.min != nothing && bds.max != nothing && bds.min >= bds.max
+        return @set bds.exists = false
+    else
+        return bds
+    end
+end
+
+function or_nothing(a, b)
+    if a == nothing
+        return b
+    else
+        return a
+    end
+end
+
 function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float64)::LineBounds
     if !dst.exists
         return false
     end
 
-    lambda = intersect(plane, dst.line)
-    if lambda == nothing # line parallel to plane normal.
+    intersection = intersect(plane, dst.line)
+    if exists(intersection)
+        # If the line direction points in opposite direction as normal,
+        # the plane is upper bounding the line.
+        is_upper = intersection.normal_dir_dot < 0
+
+        l = intersection.lambda
+        return check_existence(
+        if is_upper
+            @set dst.max = min(or_nothing(dst.max, l), l)
+        else
+            @set dst.min = max(or_nothing(dst.min, l), l)
+        end)
+    else
         if inside_halfspace(plane, dst.line.pos)
             return dst
         else
             return @set dst.exists = false
         end
-    else
-        
     end
-    return dst
 end
 
 struct PolyhedronSettings
@@ -169,7 +194,6 @@ function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float6
         bounds = initialize_line_bounds(line)
         for (plane_key, plane) in plane_map
             if plane_key != p0 && plane_key != p1
-                println("------------UPDATE-----------")
                 bounds = update_line_bounds(bounds, plane, marg)
             end
         end

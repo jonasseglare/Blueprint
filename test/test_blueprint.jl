@@ -81,12 +81,83 @@ end
 
     ps = bp.default_polyhedron_settings()
     
-    line = bp.ParameterizedLine([0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    line = bp.ParameterizedLine([0.0, 0.0, 1.0], [0.0, 0.0, 0.0])
     bds = bp.initialize_line_bounds(line)
 
-    A = bp.plane_at_pos([-1.0, 0.0, -1.0], [2.0, 0.0, 0.0])
+    A = 
 
-    bds = bp.update_line_bounds(bds, A, ps.marg)
+    bds = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([-1.0, 0.0, -1.0], [2.0, 0.0, 0.0]),
+        ps.marg)
 
-    println(string("BOUDNS: ", bds))
+    @test bds.exists
+    @test bds.min == nothing
+    @test bds.max == 2.0
+
+    bds = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([-1.0, 0.0, -1.0], [3.0, 0.0, 0.0]),
+        ps.marg)
+    
+    @test bds.exists
+    @test bds.min == nothing
+    @test bds.max == 2.0
+    
+    bds = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([-1.0, 0.0, -1.0], [1.0, 0.0, 0.0]),
+        ps.marg)
+    
+    @test bds.exists
+    @test bds.min == nothing
+    @test bds.max == 1.0
+
+    bds = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.5, 0.0, 0.0]),
+        ps.marg)
+
+    @test bds.exists
+    @test bds.min == -4.5
+    @test bds.max == 1.0
+
+    bds = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.6, 0.0, 0.0]),
+        ps.marg)
+    
+    @test bds.exists
+    @test bds.min == -4.5
+    @test bds.max == 1.0
+    
+    bds = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.1, 0.0, 0.0]),
+        ps.marg)
+    
+    @test bds.exists
+    @test bds.min == -4.1
+    @test bds.max == 1.0
+
+    bds0 = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [10.0, 0.0, 0.0]),
+        ps.marg)
+
+    @test !bds0.exists
+
+    bds1 = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([1.0, 0.0, 0.0], [-10.0, 0.0, 0.0]),
+        ps.marg)
+
+    @test bds == bds1
+    
+    bds2 = bp.update_line_bounds(
+        bds,
+        bp.plane_at_pos([1.0, 0.0, 0.0], [10.0, 0.0, 0.0]),
+        ps.marg)
+
+    @test !bds2.exists
 end
