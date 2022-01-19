@@ -33,4 +33,4 @@ https://discourse.julialang.org/t/inheriting-package-dependencies-in-test-enviro
 
 ### Module reloading
 
-https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows
+[Revise based workflows](https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows)

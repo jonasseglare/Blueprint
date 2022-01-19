@@ -16,6 +16,11 @@ function plane_at_pos(normal::Vector{T}, pos::Vector{T}) where {T}
     Plane(normal, dot(pos, normal))
 end
 
+function pos_in_plane(plane::Plane{T}) where {T}
+    lambda = plane.offset/dot(plane.normal, plane.normal)
+    return lambda*plane.normal
+end
+
 function evaluate(plane::Plane{T}, pos::Vector{T}) where {T}
     return dot(plane.normal, pos) - plane.offset
 end
@@ -81,6 +86,39 @@ end
 struct RigidTransform{T}
     rotation::Matrix{T}
     translation::Vector{T}
+end
+
+function rigid_transform_from_xy_rotation(angle::Float64, dims::Integer)
+    # #rotation = zeros(dims, dims)
+    # translation = zeros(dims)
+    cosa = cos(angle)
+    sina = sin(angle)
+    # return RigidTransform(rotation, translation)
+    dst = identity_rigid_transform(dims)
+    dst.rotation[1, 1] = cosa
+    dst.rotation[2, 2] = cosa
+    dst.rotation[1, 2] = -sina
+    dst.rotation[2, 1] = sina
+    return dst
+end
+
+function rigid_transform_from_translation(v::Vector{Float64})
+    n = length(v)
+    return RigidTransform(Matrix(1.0I, n, n), v)
+end
+
+function transform_position(transform::RigidTransform{T}, position::Vector{T}) where {T}
+    return transform.rotation*position + translation
+end
+
+function transform_direction(transform::RigidTransform{T}, direction::Vector{T}) where {T}
+    return transform.rotation*direction
+end
+
+function transform(transform::RigidTransform{T}, plane::Plane{T}) where {T}
+    normal = transform_direction(transform, plane.normal)
+    pos = transform_position(transform, pos_at_plane(plane))
+    return plane_at_pos(normal, pos)
 end
 
 function identity_rigid_transform(N::Integer)

@@ -5,8 +5,10 @@
 #  2. Command line: julia test/runtests.jl
 
 using Test
-#include("../src/Blueprint.jl") # Alternative 1
-using Blueprint               # Alternative 2
+
+include("../src/Blueprint.jl") # Alternative 1
+#using Blueprint               # Alternative 2: Does not reload changes in REPL
+
 using FunctionalCollections
 using LinearAlgebra
 
@@ -200,4 +202,10 @@ end
         bp.plane_at_pos([1.0, 0.0, 0.0], [10.0, 0.0, 0.0]))
 
     @test !bds2.exists
+end
+
+@testset "Plane transforms" begin
+    plane = plane_at_pos([0.0, 1.0, 0.0], [2.0, 1.0, 0.0])
+
+    # Try both rotation and translation, separately
 end
