@@ -41,6 +41,15 @@ function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothin
     return ParameterizedLine{T}(dir, origin)
 end
 
+function intersect(a::Plane{T}, b::ParameterizedLine{T})::Union{T, Nothing} where {T}
+    denom = dot(a.normal, b.dir)
+    if denom == 0.0
+        return nothing
+    else
+        return (a.offset - dot(a.normal, b.pos))/denom
+    end
+end
+
 
 
 ### Beams
