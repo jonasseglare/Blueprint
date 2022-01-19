@@ -1,4 +1,4 @@
 test:
-	julia test/test_blueprint.jl
+	julia test/runtests.jl
 
 .PHONY: test
