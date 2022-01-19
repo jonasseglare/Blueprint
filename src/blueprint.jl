@@ -2,6 +2,7 @@ module blueprint
 
 using FunctionalCollections
 using LinearAlgebra
+using Setfield
 
 ### Planes
 
@@ -39,6 +40,8 @@ function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothin
     origin = hcat(a.normal, b.normal, dir)\[a.offset, b.offset, 0.0]
     return ParameterizedLine{T}(dir, origin)
 end
+
+
 
 ### Beams
 
@@ -108,17 +111,21 @@ function initialize_line_bounds(line::ParameterizedLine{Float64})
     return LineBounds(line, true, nothing, nothing)
 end
 
-function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float64)::Bool
+function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float64)::LineBounds
     if !dst.exists
         return false
     end
 
     nd = dot(dst.line.dir, plane.normal)
     if abs(nd) < marg # line parallel to plane normal.
-    else
+        if inside_halfspace(plane, dst.line.pos)
+            return dst
+        else
+            return @set dst.exists = false
+        end
     end
     
-    return dst.exists
+    return dst
 end
 
 struct PolyhedronSettings

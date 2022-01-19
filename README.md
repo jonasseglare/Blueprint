@@ -1,6 +1,8 @@
 # blueprint
 
-### Shortcuts (remove this)
+## How to work with the project (personal notes)
+
+### Shortcuts
 
 Start new project:
 ```
@@ -8,7 +10,13 @@ julia
 ]
 generate blueprint
 ```
-
+### Install package
+Type this:
+```
+]
+add Setfield
+Ctrl + C
+```
 
 ### In Emacs
 
