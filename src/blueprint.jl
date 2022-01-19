@@ -41,13 +41,18 @@ function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothin
     return ParameterizedLine{T}(dir, origin)
 end
 
-function intersect(a::Plane{T}, b::ParameterizedLine{T})::Union{T, Nothing} where {T}
+struct PlaneLineIntersection{T}
+    normal_dir_dot::T
+    lambda::T
+end
+
+function exists(intersection::PlaneLineIntersection{T})::Bool where {T}
+    return intersection.normal_dir_dot != 0.0
+end
+
+function intersect(a::Plane{T}, b::ParameterizedLine{T})::PlaneLineIntersection where {T}
     denom = dot(a.normal, b.dir)
-    if denom == 0.0
-        return nothing
-    else
-        return (a.offset - dot(a.normal, b.pos))/denom
-    end
+    return PlaneLineIntersection{T}(denom, (a.offset - dot(a.normal, b.pos))/denom)
 end
 
 
@@ -125,15 +130,16 @@ function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float6
         return false
     end
 
-    nd = dot(dst.line.dir, plane.normal)
-    if abs(nd) < marg # line parallel to plane normal.
+    lambda = intersect(plane, dst.line)
+    if lambda == nothing # line parallel to plane normal.
         if inside_halfspace(plane, dst.line.pos)
             return dst
         else
             return @set dst.exists = false
         end
+    else
+        
     end
-    
     return dst
 end
 

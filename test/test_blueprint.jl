@@ -69,9 +69,10 @@ end
 @testset "Test plane/line intersection" begin
     bp = blueprint
     @test bp.intersect(bp.plane_at_pos([0.0, 0.0, -1.0], [0.0, 0.0, 3.5]),
-                       bp.ParameterizedLine([0.0, 0.0, 0.5], [0.0, 0.0, 0.0])) == 7.0
-    @test bp.intersect(bp.plane_at_pos([0.0, 0.0, -1.0], [0.0, 0.0, 3.5]),
-                       bp.ParameterizedLine([0.0, 3.0, 0.0], [0.0, 0.0, 0.0])) == nothing
+                       bp.ParameterizedLine([0.0, 0.0, 0.5], [0.0, 0.0, 0.0])).lambda == 7.0
+    @test !bp.exists(
+        bp.intersect(bp.plane_at_pos([0.0, 0.0, -1.0], [0.0, 0.0, 3.5]),
+                     bp.ParameterizedLine([0.0, 3.0, 0.0], [0.0, 0.0, 0.0])))
 
 end
 
