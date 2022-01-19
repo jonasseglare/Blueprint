@@ -113,13 +113,29 @@ function ordered_pair(a::Symbol, b::Symbol)::Tuple{Symbol,Symbol}
     end
 end
 
+struct PlaneBound
+    value::Float64
+    key::Symbol
+end
+
+function update_plane_bound(
+    bound::Union{PlaneBound,Nothing}, key::Symbol, value::Float64, cmp)
+    if bound == nothing
+        return PlaneBound(value, key)
+    elseif cmp(bound.value, value)
+        return PlaneBound(value, key)
+    else
+        return bound
+    end
+end
+
 struct LineBounds
     line::ParameterizedLine{Float64}
     exists::Bool
 
     # Nothing means unlimited
-    min::Union{Float64,Nothing}
-    max::Union{Float64,Nothing}
+    lower::Union{PlaneBound,Nothing}
+    upper::Union{PlaneBound,Nothing}
 end
 
 function initialize_line_bounds(line::ParameterizedLine{Float64})
@@ -127,7 +143,7 @@ function initialize_line_bounds(line::ParameterizedLine{Float64})
 end
 
 function check_existence(bds::LineBounds)
-    if bds.min != nothing && bds.max != nothing && bds.min >= bds.max
+    if bds.lower != nothing && bds.upper != nothing && bds.lower.value >= bds.upper.value
         return @set bds.exists = false
     else
         return bds
@@ -142,7 +158,8 @@ function or_nothing(a, b)
     end
 end
 
-function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float64)::LineBounds
+
+function update_line_bounds(dst::LineBounds, key::Symbol, plane::Plane{Float64})::LineBounds
     if !dst.exists
         return false
     end
@@ -156,9 +173,9 @@ function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float6
         l = intersection.lambda
         return check_existence(
         if is_upper
-            @set dst.max = min(or_nothing(dst.max, l), l)
+            @set dst.upper = update_plane_bound(dst.upper, key, l, >)
         else
-            @set dst.min = max(or_nothing(dst.min, l), l)
+            @set dst.lower = update_plane_bound(dst.lower, key, l, <)
         end)
     else
         if inside_halfspace(plane, dst.line.pos)
@@ -177,8 +194,7 @@ function default_polyhedron_settings()
     return PolyhedronSettings(1.0e-6)
 end
 
-function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}}, marg::Float64=1.0e-6)
-
+function compute_bounded_lines(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
     # List all lines between pairs of intersecting planes
     all_plane_intersections = Dict{Tuple{Symbol,Symbol}, ParameterizedLine{Float64}}()
     for x in plane_map
@@ -190,8 +206,7 @@ function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float6
         end
     end
 
-
-    plane_intersections = Dict{Tuple{Symbol,Symbol}, ParameterizedLine{Float64}}()
+    plane_intersections = Dict{Tuple{Symbol,Symbol}, LineBounds}()
     
     # For all lines, remove lines that don't exist because of other planes
     for ((p0, p1), line) in all_plane_intersections
@@ -199,20 +214,25 @@ function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float6
         bounds = initialize_line_bounds(line)
         for (plane_key, plane) in plane_map
             if plane_key != p0 && plane_key != p1
-                bounds = update_line_bounds(bounds, plane, marg)
+                bounds = update_line_bounds(bounds, plane_key, plane)
             end
         end
 
-        println(string(">> Line bounds: ", bounds))
-        
         if bounds.exists
-            plane_intersections[(p0, p1)] = line
+            plane_intersections[(p0, p1)] = bounds
         end
     end
+    
+    return plane_intersections
+end
 
-    println(string("Line segment filtering from ",
-                   length(all_plane_intersections), " to ",
-                   length(plane_intersections)))
+function remove_redundant_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
+    return plane_map
+end
+
+function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
+    plane_map = remove_redundant_planes(plane_map)
+    bounded_lines = compute_bounded_lines(plane_map)
 end
 
 struct Beam

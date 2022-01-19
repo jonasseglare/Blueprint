@@ -51,7 +51,6 @@ end
                               :b => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
                               :c => bp.plane_at_pos([-1.0, -1.0, 0.0], [0.5, 0.5, 0.0]))
     polyhedron = bp.polyhedron_from_planes(planes)
-    print(polyhedron)
 end
 
 @testset "Beam tests" begin
@@ -96,76 +95,76 @@ end
 
     bds = bp.update_line_bounds(
         bds,
-        bp.plane_at_pos([-1.0, 0.0, -1.0], [2.0, 0.0, 0.0]),
-        ps.marg)
+        :x,
+        bp.plane_at_pos([-1.0, 0.0, -1.0], [2.0, 0.0, 0.0]))
 
     @test bds.exists
-    @test bds.min == nothing
-    @test bds.max == 2.0
-
-    bds = bp.update_line_bounds(
-        bds,
-        bp.plane_at_pos([-1.0, 0.0, -1.0], [3.0, 0.0, 0.0]),
-        ps.marg)
-    
-    @test bds.exists
-    @test bds.min == nothing
-    @test bds.max == 2.0
-    
-    bds = bp.update_line_bounds(
-        bds,
-        bp.plane_at_pos([-1.0, 0.0, -1.0], [1.0, 0.0, 0.0]),
-        ps.marg)
-    
-    @test bds.exists
-    @test bds.min == nothing
-    @test bds.max == 1.0
+    @test bds.lower == nothing
+    @test bds.upper.value == 2.0
 
     bds = bp.update_line_bounds(
         bds,
-        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.5, 0.0, 0.0]),
-        ps.marg)
-
-    @test bds.exists
-    @test bds.min == -4.5
-    @test bds.max == 1.0
-
-    bds = bp.update_line_bounds(
-        bds,
-        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.6, 0.0, 0.0]),
-        ps.marg)
+        :x,
+        bp.plane_at_pos([-1.0, 0.0, -1.0], [3.0, 0.0, 0.0]))
     
     @test bds.exists
-    @test bds.min == -4.5
-    @test bds.max == 1.0
+    @test bds.lower == nothing
+    @test bds.upper.value == 2.0
     
     bds = bp.update_line_bounds(
         bds,
-        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.1, 0.0, 0.0]),
-        ps.marg)
+        :x,
+        bp.plane_at_pos([-1.0, 0.0, -1.0], [1.0, 0.0, 0.0]))
     
     @test bds.exists
-    @test bds.min == -4.1
-    @test bds.max == 1.0
+    @test bds.lower == nothing
+    @test bds.upper.value == 1.0
+
+    bds = bp.update_line_bounds(
+        bds,
+        :x,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.5, 0.0, 0.0]))
+
+    @test bds.exists
+    @test bds.lower.value == -4.5
+    @test bds.upper.value == 1.0
+
+    bds = bp.update_line_bounds(
+        bds,
+        :x,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.6, 0.0, 0.0]))
+    
+    @test bds.exists
+    @test bds.lower.value == -4.5
+    @test bds.upper.value == 1.0
+    
+    bds = bp.update_line_bounds(
+        bds,
+        :x,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [-4.1, 0.0, 0.0]))
+    
+    @test bds.exists
+    @test bds.lower.value == -4.1
+    @test bds.upper.value == 1.0
 
     bds0 = bp.update_line_bounds(
         bds,
-        bp.plane_at_pos([1.0, 0.0, 1.0], [10.0, 0.0, 0.0]),
-        ps.marg)
+        :x,
+        bp.plane_at_pos([1.0, 0.0, 1.0], [10.0, 0.0, 0.0]))
 
     @test !bds0.exists
 
     bds1 = bp.update_line_bounds(
         bds,
-        bp.plane_at_pos([1.0, 0.0, 0.0], [-10.0, 0.0, 0.0]),
-        ps.marg)
+        :x,
+        bp.plane_at_pos([1.0, 0.0, 0.0], [-10.0, 0.0, 0.0]))
 
     @test bds == bds1
     
     bds2 = bp.update_line_bounds(
         bds,
-        bp.plane_at_pos([1.0, 0.0, 0.0], [10.0, 0.0, 0.0]),
-        ps.marg)
+        :x,
+        bp.plane_at_pos([1.0, 0.0, 0.0], [10.0, 0.0, 0.0]))
 
     @test !bds2.exists
 end
