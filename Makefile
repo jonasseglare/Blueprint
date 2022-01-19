@@ -1,4 +1,4 @@
 test:
-	julia test/runtests.jl
+	julia --project=. test/runtests.jl
 
 .PHONY: test
