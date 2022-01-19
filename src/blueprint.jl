@@ -100,10 +100,6 @@ function beam_factory(prefix::String, specs::BeamSpecs)
     BeamFactory(prefix, specs, 0)
 end
 
-# A polyhedron is defined by the half spaces of a set of planes. The half space of a plane is the space in
-# the positive direction of the normal.
-struct Polyhedron
-end
 
 function ordered_pair(a::Symbol, b::Symbol)::Tuple{Symbol,Symbol}
     if a < b
@@ -111,6 +107,10 @@ function ordered_pair(a::Symbol, b::Symbol)::Tuple{Symbol,Symbol}
     else
         (b, a)
     end
+end
+
+function ordered_triplet(a::Symbol, b::Symbol, c::Symbol)
+    Tuple(sort([a, b, c]))
 end
 
 struct PlaneBound
@@ -223,27 +223,44 @@ function compute_bounded_lines(plane_map::PersistentHashMap{Symbol,Plane{Float64
         end
     end
     
-    return plane_intersections
+    return phmap(collect(plane_intersections))
 end
 
-function remove_redundant_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
-    return plane_map
+function shadowed_by(a::Plane{T}, b::Plane{T}) where {T}
+    return a.normal == b.normal && a.offset < b.offset
 end
+
+function remove_shadowed_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
+    dst = Dict{Symbol,Plane{Float64}}()
+    for (sym, plane) in plane_map
+        dst[sym] = plane
+    end
+    return phmap(collect(dst))
+end
+
+# A polyhedron is defined by the half spaces of a set of planes. The half space of a plane is the space in
+# the positive direction of the normal.
+struct Polyhedron
+    planes::PersistentHashMap{Symbol,Plane{Float64}}
+    bounded_lines::PersistentHashMap{Tuple{Symbol,Symbol}, LineBounds}
+end
+
 
 function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
-    plane_map = remove_redundant_planes(plane_map)
+    plane_map = remove_shadowed_planes(plane_map)
     bounded_lines = compute_bounded_lines(plane_map)
+    return Polyhedron(plane_map, bounded_lines)
 end
 
 struct Beam
     name::String
     specs::BeamSpecs
-    polyhedron::Polyhedron
+    #polyhedron::Polyhedron
 end
 
 function new_beam(name::String, specs::BeamSpecs)
-    p = Polyhedron()
-    Beam(name, specs, p)
+    #p = Polyhedron()
+    Beam(name, specs)
 end
 
 function new_beam!(factory::BeamFactory)
