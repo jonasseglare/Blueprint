@@ -5,12 +5,14 @@
 #  2. Command line: julia test/test_blueprint.jl
 
 using Test
-include("../src/blueprint.jl")
-
+include("../src/blueprint.jl") # Alternative 1
+#using blueprint               # Alternative 2
 using FunctionalCollections
 using LinearAlgebra
 
-import .blueprint
+# Not needed:
+#import .blueprint
+
 
 @testset "Plane tests" begin
     @test blueprint.plane_at_pos([1, 2, 3], [3, 3, 7]).offset == 30.0

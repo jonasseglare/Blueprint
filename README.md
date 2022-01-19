@@ -18,6 +18,13 @@ add Setfield
 Ctrl + C
 ```
 
+### Unit testing
+
+
+
+About dependencies, inheriting in test environment:
+https://discourse.julialang.org/t/inheriting-package-dependencies-in-test-environment/68505/2
+
 ### In Emacs
 
 `C-c C-p` : start REPL
