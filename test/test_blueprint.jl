@@ -53,3 +53,30 @@ end
     @test beam.name == "Mjao0"
     @test f.counter == 1
 end
+
+@testset "Half-space test" begin
+    bp = blueprint
+    plane = bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.5])
+    @test bp.inside_halfspace(plane, [100.0, -2220.0, 0.6])
+    @test !(bp.inside_halfspace(plane, [100.0, -2220.0, 0.4]))
+end
+
+@testset "Ordered pair test" begin
+    @test blueprint.ordered_pair(:a, :b) == (:a, :b)
+    @test blueprint.ordered_pair(:b, :a) == (:a, :b)
+end
+
+@testset "Update line bounds test" begin
+    bp = blueprint
+
+    ps = bp.default_polyhedron_settings()
+    
+    line = bp.ParameterizedLine([0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    bds = bp.initialize_line_bounds(line)
+
+    A = bp.plane_at_pos([-1.0, 0.0, -1.0], [2.0, 0.0, 0.0])
+
+    bds = bp.update_line_bounds(bds, A, ps.marg)
+
+    println(string("BOUDNS: ", bds))
+end

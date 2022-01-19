@@ -19,11 +19,15 @@ function evaluate(plane::Plane{T}, pos::Vector{T}) where {T}
     return dot(plane.normal, pos) - plane.offset
 end
 
+function inside_halfspace(plane::Plane{T}, pos::Vector{T}) where {T}
+    return evaluate(plane, pos) >= 0.0
+end    
+
 ## Line
 
 struct ParameterizedLine{T}
-    pos::Vector{T}
     dir::Vector{T}
+    pos::Vector{T}
 end
 
 function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothing} where {T}
@@ -33,7 +37,7 @@ function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothin
     end
 
     origin = hcat(a.normal, b.normal, dir)\[a.offset, b.offset, 0.0]
-    return ParameterizedLine{T}(origin, dir)
+    return ParameterizedLine{T}(dir, origin)
 end
 
 ### Beams
@@ -94,6 +98,8 @@ end
 struct LineBounds
     line::ParameterizedLine{Float64}
     exists::Bool
+
+    # Nothing means unlimited
     min::Union{Float64,Nothing}
     max::Union{Float64,Nothing}
 end
@@ -108,14 +114,24 @@ function update_line_bounds(dst::LineBounds, plane::Plane{Float64}, marg::Float6
     end
 
     nd = dot(dst.line.dir, plane.normal)
-    if abs(nd) < marg
+    if abs(nd) < marg # line parallel to plane normal.
     else
     end
     
     return dst.exists
 end
 
+struct PolyhedronSettings
+    marg::Float64
+end
+
+function default_polyhedron_settings()
+    return PolyhedronSettings(1.0e-6)
+end
+
 function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}}, marg::Float64=1.0e-6)
+
+    # List all lines between pairs of intersecting planes
     all_plane_intersections = Dict{Tuple{Symbol,Symbol}, ParameterizedLine{Float64}}()
     for x in plane_map
         for y in plane_map
