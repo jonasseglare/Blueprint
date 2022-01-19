@@ -47,6 +47,16 @@ end
     @test norm(line.pos - [2.0, 1.0, 0.0]) < 1.0e-6
 end
 
+@testset "Plane shadowing" begin
+    bp = blueprint    
+    @test bp.shadowed_by(bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 3.0]),
+                         bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 4.0]))
+    @test !bp.shadowed_by(bp.plane_at_pos([0.0, 0.0, 1.001], [0.0, 0.0, 3.0]),
+                          bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 4.0]))
+    @test !bp.shadowed_by(bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 4.0]),
+                          bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 3.0]))
+end
+
 @testset "Polyhedron tests" begin
     bp = blueprint
     planes = @Persistent Dict(:a => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),

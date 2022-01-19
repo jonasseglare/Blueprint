@@ -31,6 +31,10 @@ struct ParameterizedLine{T}
     pos::Vector{T}
 end
 
+function evaluate(line::ParameterizedLine{T}, lambda::T) where {T}
+    return line.pos + lambda*line.dir
+end
+
 function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothing} where {T}
     dir = cross(a.normal, b.normal)
     if norm(dir) <= 0.0
@@ -230,10 +234,21 @@ function shadowed_by(a::Plane{T}, b::Plane{T}) where {T}
     return a.normal == b.normal && a.offset < b.offset
 end
 
+function shadowed_by(a::Plane{T}, plane_map::PersistentHashMap{Symbol, Plane{T}}) where {T}
+    for (sym, plane) in plane_map
+        if shadowed_by(a, plane)
+            return true
+        end
+    end
+    return false
+end
+
 function remove_shadowed_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
     dst = Dict{Symbol,Plane{Float64}}()
     for (sym, plane) in plane_map
-        dst[sym] = plane
+        if !shadowed_by(plane, plane_map)
+            dst[sym] = plane
+        end
     end
     return phmap(collect(dst))
 end
@@ -243,13 +258,33 @@ end
 struct Polyhedron
     planes::PersistentHashMap{Symbol,Plane{Float64}}
     bounded_lines::PersistentHashMap{Tuple{Symbol,Symbol}, LineBounds}
+    corners::Dict{Tuple{Symbol,Symbol,Symbol}, Vector{Float64}}
 end
 
+function visit_bounded_line_corner!(
+    a::Symbol, b::Symbol, bds::LineBounds,
+    pb::Union{PlaneBound, Nothing},
+    dst::Dict{Tuple{Symbol, Symbol, Symbol}, Vector{Float64}})
+    if pb != nothing
+        dst[ordered_triplet(a, b, pb.key)] = evaluate(bds.line, pb.value)
+    end
+end
+
+function collect_corners(
+    bounded_lines::PersistentHashMap{Tuple{Symbol,Symbol}, LineBounds})
+    dst = Dict{Tuple{Symbol, Symbol, Symbol}, Vector{Float64}}()
+    for ((a, b), bds) in bounded_lines
+        visit_bounded_line_corner!(a, b, bds, bds.lower, dst)
+        visit_bounded_line_corner!(a, b, bds, bds.upper, dst)
+    end
+    return dst #phmap(collect(dst))
+end
 
 function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
     plane_map = remove_shadowed_planes(plane_map)
     bounded_lines = compute_bounded_lines(plane_map)
-    return Polyhedron(plane_map, bounded_lines)
+    corners = collect_corners(bounded_lines)
+    return Polyhedron(plane_map, bounded_lines, corners)
 end
 
 struct Beam
