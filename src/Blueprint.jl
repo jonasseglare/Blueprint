@@ -1,4 +1,4 @@
-module blueprint
+module Blueprint
 
 using FunctionalCollections
 using LinearAlgebra

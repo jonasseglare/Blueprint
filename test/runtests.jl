@@ -2,33 +2,33 @@
 
 # Run tests either by
 #  1. C-c C-b from emacs
-#  2. Command line: julia test/test_blueprint.jl
+#  2. Command line: julia test/runtests.jl
 
 using Test
-include("../src/blueprint.jl") # Alternative 1
-#using blueprint               # Alternative 2
+#include("../src/Blueprint.jl") # Alternative 1
+using Blueprint               # Alternative 2
 using FunctionalCollections
 using LinearAlgebra
 
 # Not needed:
-#import .blueprint
+#import .Blueprint
 
 
 @testset "Plane tests" begin
-    @test blueprint.plane_at_pos([1, 2, 3], [3, 3, 7]).offset == 30.0
+    @test Blueprint.plane_at_pos([1, 2, 3], [3, 3, 7]).offset == 30.0
 
-    plane = blueprint.plane_at_pos([1, 2, 3], [10, 11, 12])
+    plane = Blueprint.plane_at_pos([1, 2, 3], [10, 11, 12])
 
     @test plane.normal[1] == 1.0
     @test plane.normal[2] == 2.0
     @test plane.offset == 68.0
-    @test blueprint.evaluate(plane, [10, 11, 12]) == 0.0
-    @test blueprint.evaluate(plane, [11, 13, 15]) == 14.0
-    @test blueprint.evaluate(plane, [9, 9, 9]) == -14.0
+    @test Blueprint.evaluate(plane, [10, 11, 12]) == 0.0
+    @test Blueprint.evaluate(plane, [11, 13, 15]) == 14.0
+    @test Blueprint.evaluate(plane, [9, 9, 9]) == -14.0
 end
 
 @testset "Plane intersection" begin
-    bp = blueprint
+    bp = Blueprint
     a = bp.Plane([1.0, 0.0, 0.0], 0.0)
     b = bp.Plane([0.0, 1.0, 0.0], 0.0)
     line = bp.intersect(a, b)
@@ -37,7 +37,7 @@ end
 end
 
 @testset "Plane intersection 2" begin
-    bp = blueprint
+    bp = Blueprint
     a = bp.plane_at_pos([-1.0, 2.0, 0.0], [0.0, 0.0, 0.0])
     b = bp.plane_at_pos([10.0, 0.0, 0.0], [2.0, 0.0, 0.0])
     line = bp.intersect(b, a)
@@ -48,7 +48,7 @@ end
 end
 
 @testset "Plane shadowing" begin
-    bp = blueprint    
+    bp = Blueprint    
     @test bp.shadowed_by(bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 3.0]),
                          bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 4.0]))
     @test !bp.shadowed_by(bp.plane_at_pos([0.0, 0.0, 1.001], [0.0, 0.0, 3.0]),
@@ -58,7 +58,7 @@ end
 end
 
 @testset "Polyhedron tests" begin
-    bp = blueprint
+    bp = Blueprint
     planes = @Persistent Dict(:a => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
                               :b => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
                               :c => bp.plane_at_pos([-1.0, -1.0, 0.0], [0.5, 0.5, 0.0]))
@@ -70,7 +70,7 @@ end
 end
 
 @testset "Polyhedron tests 2" begin
-    bp = blueprint
+    bp = Blueprint
     planes = @Persistent Dict(:x => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
                               :y => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
                               :z => bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]),
@@ -87,27 +87,27 @@ end
 end
 
 @testset "Beam tests" begin
-    specs = blueprint.BeamSpecs(1, 3)
-    f = blueprint.beam_factory("Mjao", specs)
-    beam = blueprint.new_beam!(f)
+    specs = Blueprint.BeamSpecs(1, 3)
+    f = Blueprint.beam_factory("Mjao", specs)
+    beam = Blueprint.new_beam!(f)
     @test beam.name == "Mjao0"
     @test f.counter == 1
 end
 
 @testset "Half-space test" begin
-    bp = blueprint
+    bp = Blueprint
     plane = bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.5])
     @test bp.inside_halfspace(plane, [100.0, -2220.0, 0.6])
     @test !(bp.inside_halfspace(plane, [100.0, -2220.0, 0.4]))
 end
 
 @testset "Ordered pair test" begin
-    @test blueprint.ordered_pair(:a, :b) == (:a, :b)
-    @test blueprint.ordered_pair(:b, :a) == (:a, :b)
+    @test Blueprint.ordered_pair(:a, :b) == (:a, :b)
+    @test Blueprint.ordered_pair(:b, :a) == (:a, :b)
 end
 
 @testset "Test plane/line intersection" begin
-    bp = blueprint
+    bp = Blueprint
     @test bp.intersect(bp.plane_at_pos([0.0, 0.0, -1.0], [0.0, 0.0, 3.5]),
                        bp.ParameterizedLine([0.0, 0.0, 0.5], [0.0, 0.0, 0.0])).lambda == 7.0
     @test !bp.exists(
@@ -117,7 +117,7 @@ end
 end
 
 @testset "Update line bounds test" begin
-    bp = blueprint
+    bp = Blueprint
 
     ps = bp.default_polyhedron_settings()
     
