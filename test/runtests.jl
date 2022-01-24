@@ -5,8 +5,10 @@
 #  2. Command line: julia test/runtests.jl
 
 using Test
-#include("../src/Blueprint.jl") # Alternative 1
-using Blueprint               # Alternative 2
+
+include("../src/Blueprint.jl") # Alternative 1
+#using Blueprint               # Alternative 2: Does not reload changes in REPL
+
 using FunctionalCollections
 using LinearAlgebra
 
@@ -200,4 +202,41 @@ end
         bp.plane_at_pos([1.0, 0.0, 0.0], [10.0, 0.0, 0.0]))
 
     @test !bds2.exists
+end
+
+@testset "Plane transforms" begin
+    bp = Blueprint
+    plane = bp.plane_at_pos([0.0, 1.0, 0.0], [2.0, 1.0, 0.0])
+
+    # Try both rotation and translation, separately
+    plane2 = bp.transform(bp.rigid_transform_from_xy_rotation(0.5*pi, 3), plane)
+    @test isapprox(plane2.normal, [-1.0, 0.0, 0.0], atol=1.0e-6)
+    @test isapprox(plane2.offset, 1.0, atol=1.0-6)
+
+    plane3 = bp.transform(bp.rigid_transform_from_translation([0.5, 3.4, 0.0]), plane)
+    @test plane3.normal == [0.0, 1.0, 0.0]
+    @test plane3.offset == 4.4
+end
+
+@testset "Test add planes" begin
+    bp = Blueprint
+    base_poly = bp.polyhedron_from_planes(Dict(:x => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+                                               :y => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+                                               :z => bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.0])))
+    @test 1 == length(base_poly.corners)
+    polyhedron = bp.add_planes(base_poly, Dict(:xyz => bp.plane_at_pos([-1.0, -1.0, -1.0], [1.0, 0.0, 0.0])))
+    @test 4 == length(polyhedron.corners)
+    @test [0.0, 1.0, 0.0] == polyhedron.corners[(:x, :xyz, :z)]
+
+    tpoly = bp.transform(bp.rigid_transform_from_xy_rotation(0.5*pi, 3), polyhedron)
+    @test isapprox([-1.0, 0.0, 0.0], tpoly.corners[(:x, :xyz, :z)], atol=1.0e-6)
+end
+
+@testset "Test flip" begin
+    bp = Blueprint
+    plane = bp.plane_at_pos([3, 0.5, 0.25], [-3.0, 0.0, -4.0])
+    plane2 = bp.flip(plane)
+
+    X = [9.0, 4.7, 2.0]
+    @test bp.evaluate(plane, X) == -bp.evaluate(plane2, X)
 end

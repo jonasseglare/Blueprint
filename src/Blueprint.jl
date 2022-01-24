@@ -12,8 +12,17 @@ struct Plane{T}
     offset::T
 end
 
+function flip(plane::Plane{T}) where {T}
+    return Plane{T}(-plane.normal, -plane.offset)
+end
+
 function plane_at_pos(normal::Vector{T}, pos::Vector{T}) where {T}
     Plane(normal, dot(pos, normal))
+end
+
+function pos_in_plane(plane::Plane{T}) where {T}
+    lambda = plane.offset/dot(plane.normal, plane.normal)
+    return lambda*plane.normal
 end
 
 function evaluate(plane::Plane{T}, pos::Vector{T}) where {T}
@@ -81,6 +90,39 @@ end
 struct RigidTransform{T}
     rotation::Matrix{T}
     translation::Vector{T}
+end
+
+function rigid_transform_from_xy_rotation(angle::Float64, dims::Integer)
+    # #rotation = zeros(dims, dims)
+    # translation = zeros(dims)
+    cosa = cos(angle)
+    sina = sin(angle)
+    # return RigidTransform(rotation, translation)
+    dst = identity_rigid_transform(dims)
+    dst.rotation[1, 1] = cosa
+    dst.rotation[2, 2] = cosa
+    dst.rotation[1, 2] = -sina
+    dst.rotation[2, 1] = sina
+    return dst
+end
+
+function rigid_transform_from_translation(v::Vector{Float64})
+    n = length(v)
+    return RigidTransform(Matrix(1.0I, n, n), v)
+end
+
+function transform_position(transform::RigidTransform{T}, position::Vector{T}) where {T}
+    return transform.rotation*position + transform.translation
+end
+
+function transform_direction(transform::RigidTransform{T}, direction::Vector{T}) where {T}
+    return transform.rotation*direction
+end
+
+function transform(transform::RigidTransform{T}, plane::Plane{T}) where {T}
+    normal = transform_direction(transform, plane.normal)
+    pos = transform_position(transform, pos_in_plane(plane))
+    return plane_at_pos(normal, pos)
 end
 
 function identity_rigid_transform(N::Integer)
@@ -234,7 +276,7 @@ function shadowed_by(a::Plane{T}, b::Plane{T}) where {T}
     return a.normal == b.normal && a.offset < b.offset
 end
 
-function shadowed_by(a::Plane{T}, plane_map::PersistentHashMap{Symbol, Plane{T}}) where {T}
+function shadowed_by(a::Plane{T}, plane_map::AbstractDict{Symbol, Plane{T}}) where {T}
     for (sym, plane) in plane_map
         if shadowed_by(a, plane)
             return true
@@ -243,7 +285,7 @@ function shadowed_by(a::Plane{T}, plane_map::PersistentHashMap{Symbol, Plane{T}}
     return false
 end
 
-function remove_shadowed_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
+function remove_shadowed_planes(plane_map::AbstractDict{Symbol,Plane{Float64}})
     dst = Dict{Symbol,Plane{Float64}}()
     for (sym, plane) in plane_map
         if !shadowed_by(plane, plane_map)
@@ -280,11 +322,31 @@ function collect_corners(
     return dst #phmap(collect(dst))
 end
 
-function polyhedron_from_planes(plane_map::PersistentHashMap{Symbol,Plane{Float64}})
+function polyhedron_from_planes(plane_map::AbstractDict{Symbol,Plane{Float64}})::Polyhedron
     plane_map = remove_shadowed_planes(plane_map)
     bounded_lines = compute_bounded_lines(plane_map)
     corners = collect_corners(bounded_lines)
     return Polyhedron(plane_map, bounded_lines, corners)
+end
+
+function add_planes(polyhedron::Polyhedron, plane_map::AbstractDict{Symbol,Plane{Float64}})::Polyhedron
+    return polyhedron_from_planes(merge(polyhedron.planes, plane_map))
+end
+
+function add_plane(polyhedron::Polyhedron, key::Symbol, value::Plane{Float64})::Polyhedron
+    return add_planes(polyhedron, Dict(key => value))
+end
+
+function intersect(a::Polyhedron, b::Polyhedron)
+    return add_planes(a, b.planes)
+end
+
+function transform(rigid_transform::RigidTransform{Float64}, polyhedron::Polyhedron)
+    dst = Dict{Symbol, Plane{Float64}}()
+    for (k, v) in polyhedron.planes
+        dst[k] = transform(rigid_transform, v)
+    end
+    return polyhedron_from_planes(dst)
 end
 
 struct Beam

@@ -20,6 +20,7 @@ Ctrl + C
 
 ### Unit testing
 
+Call `make test`. See [this Stack Overflow question](https://stackoverflow.com/q/70772117/1008794) for more information.
 
 
 About dependencies, inheriting in test environment:
@@ -33,4 +34,4 @@ https://discourse.julialang.org/t/inheriting-package-dependencies-in-test-enviro
 
 ### Module reloading
 
-https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows
+[Revise based workflows](https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows)
