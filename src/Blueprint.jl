@@ -18,6 +18,10 @@ function flip(plane::Plane{T}) where {T}
     return Plane{T}(-plane.normal, -plane.offset)
 end
 
+function translate(plane::Plane{T}, amount::T) where {T}
+    return Plane{T}(plane.normal, plane.offset + amount)
+end
+
 function plane_at_pos(normal::Vector{T}, pos::Vector{T}) where {T}
     Plane(normal, dot(pos, normal))
 end
@@ -44,6 +48,28 @@ function normalize_plane(plane::Plane{T}) where {T}
     return scale(1.0/len, plane)
 end
 
+function project(plane::Plane{T}, X::Vector{T}) where {T}
+    plane = normalize_plane(plane)
+    return X - evaluate(plane, X)*plane.normal
+end
+
+function parallel_plane_distance(a::Plane{T}, b::Plane{T}) where {T}
+    X = pos_in_plane(a)
+    return norm(X - project(b, X))
+end
+    
+
+function plane_at_dim(dim::Integer, pos::Float64)
+    normal = [0.0, 0.0, 0.0]
+    normal[dim] = 1.0
+    return Plane{Float64}(normal, pos)
+end
+
+function facing_plane(plane::Plane{T}, distance) where {T}
+    return flip(translate(plane, distance))
+end
+
+
 ## Line
 
 struct ParameterizedLine{T}
@@ -53,6 +79,14 @@ end
 
 function evaluate(line::ParameterizedLine{T}, lambda::T) where {T}
     return line.pos + lambda*line.dir
+end
+
+function direct_like(line::ParameterizedLine{T}, dir::Vector{T}) where {T}
+    if dot(line.dir, dir) < 0
+        return ParameterizedLine{T}(-line.dir, line.pos)
+    else
+        return line
+    end
 end
 
 function intersect(a::Plane{T}, b::Plane{T})::Union{ParameterizedLine{T}, Nothing} where {T}
@@ -294,9 +328,9 @@ end
 # A polyhedron is defined by the half spaces of a set of planes. The half space of a plane is the space in
 # the positive direction of the normal.
 struct Polyhedron
-    planes::PersistentHashMap{PlaneKey,Plane{Float64}}
-    bounded_lines::PersistentHashMap{Tuple{PlaneKey,PlaneKey}, LineBounds}
-    corners::Dict{Tuple{PlaneKey,PlaneKey,PlaneKey}, Vector{Float64}}
+    planes::AbstractDict{PlaneKey,Plane{Float64}}
+    bounded_lines::AbstractDict{Tuple{PlaneKey,PlaneKey}, LineBounds}
+    corners::AbstractDict{Tuple{PlaneKey,PlaneKey,PlaneKey}, Vector{Float64}}
 end
 
 function visit_bounded_line_corner!(
@@ -318,11 +352,38 @@ function collect_corners(
     return dst #phmap(collect(dst))
 end
 
+function remove_planes_without_corners(
+    planes::AbstractDict{PlaneKey, Plane{Float64}},
+    corners::Dict{Tuple{PlaneKey,PlaneKey,PlaneKey}, Vector{Float64}})
+
+    if length(corners) == 0
+        return planes
+    end
+
+    # If there exists at least one pair of planes that are not parallel, then
+    # *all* planes that are part of the polyhedron will be have at least one corner.
+
+    referred_planes = Set{PlaneKey}()
+    for (k3, x) in corners
+        for k in k3
+            push!(referred_planes, k)
+        end
+    end
+    
+    dst = Dict{PlaneKey, Plane{Float64}}()
+    for (k, p) in planes
+        if k in referred_planes
+            dst[k] = p
+        end
+    end
+    return planes
+end
+
 function polyhedron_from_planes(plane_map::AbstractDict{PlaneKey,Plane{Float64}})::Polyhedron
     plane_map = remove_shadowed_planes(plane_map)
     bounded_lines = compute_bounded_lines(plane_map)
     corners = collect_corners(bounded_lines)
-    return Polyhedron(plane_map, bounded_lines, corners)
+    return Polyhedron(remove_planes_without_corners(plane_map, corners), bounded_lines, corners)
 end
 
 function add_planes(polyhedron::Polyhedron, plane_map::AbstractDict{PlaneKey,Plane{Float64}})::Polyhedron
@@ -345,15 +406,52 @@ function transform(rigid_transform::RigidTransform{Float64}, polyhedron::Polyhed
     return polyhedron_from_planes(dst)
 end
 
+function bounding_points_from_lines(polyhedron::Polyhedron)
+    return map(bdl -> bdl.line.pos, values(polyhedron.bounded_lines))
+end
+
+function bounding_points_from_corners(polyhedron::Polyhedron)
+    return collect(values(polyhedron.corners))
+end
+
 function bounding_points(polyhedron::Polyhedron)::AbstractVector{Vector{Float64}}
-    return [map(bdl -> bdl.line.pos, values(polyhedron.bounded_lines)); collect(values(polyhedron.corners))]
+    corners = bounding_points_from_corners(polyhedron)
+    if length(corners) == 0
+        return bounding_points_from_lines(polyhedron)
+    else
+        return corners
+    end
+end
+
+function mid_point(polyhedron::Polyhedron)
+    pts = bounding_points(polyhedron)
+    sum = pts[1]
+    for pt in pts[2:end]
+        sum += pt
+    end
+    return (1.0/length(pts))*sum
 end
 
 ### Beams
 
-# X-width 
-# Y-height # Usually, X < Y
+# X-width (the shorter)
+# Y-height (the longer) # Usually, X < Y
 # Z-length
+
+## Example:
+#
+#   Y
+#   ^
+#   |####
+#   |####
+#   |####
+#   |####
+#   |####
+#   |####
+#   o-----> X
+#
+const local_x_dir = [1.0, 0.0, 0.0]
+const local_y_dir = [0.0, 1.0, 0.0]
 
 const world_up = [0.0, 0.0, 1.0]
 const local_beam_dir = [0.0, 0.0, 1.0]
@@ -361,6 +459,7 @@ const beam_X_lower = :beam_X_lower
 const beam_X_upper = :beam_X_upper
 const beam_Y_lower = :beam_Y_lower
 const beam_Y_upper = :beam_Y_upper
+const plane_keys_per_beam_dim = [(beam_X_lower, beam_X_upper), (beam_Y_lower, beam_Y_upper)]
 
 struct BeamSpecs
     Xsize::Real
@@ -369,25 +468,31 @@ struct BeamSpecs
     # The Z direction is the direction of the beam
 end
 
+function quadratic_beam_specs(size::Real)
+    return BeamSpecs(size, size)
+end
+
 struct Beam
     transform::RigidTransform{Float64}
     specs::BeamSpecs
     polyhedron::Polyhedron
-end
-
-function plane_at_dim(dim::Integer, pos::Float64)
-    normal = [0.0, 0.0, 0.0]
-    normal[dim] = 1.0
-    return Plane{Float64}(normal, pos)
+    drill_holes::AbstractDict{PlaneKey, PersistentVector{Vector{Float64}}}
 end
 
 function new_beam(beam_specs::BeamSpecs)
+    xlow = plane_at_dim(1, 0.0)
+    ylow = plane_at_dim(2, 0.0)
     return Beam(identity_transform_3d,
     beam_specs,
-    polyhedron_from_planes(Dict(beam_X_lower => plane_at_dim(1, 0.0),
+    polyhedron_from_planes(Dict(beam_X_lower => xlow,
                                 beam_X_upper => flip(plane_at_dim(1, beam_specs.Xsize)),
-                                beam_Y_lower => plane_at_dim(2, 0.0),
-                                beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))))
+                                beam_Y_lower => ylow,
+                                beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))),
+                Dict{PlaneKey, PersistentVector{Vector{Float64}}}())
+end
+
+function beam_dir(beam::Beam)
+    return transform_direction(beam.transform, local_beam_dir)
 end
 
 function orthogonalize(target, reference)
@@ -413,10 +518,21 @@ function orient_beam_transform(world_dir::Vector{Float64}, up_in_beam_coordinate
     return T
 end
 
+function transform(rigid_transform::RigidTransform{Float64},
+    src::AbstractDict{PlaneKey, PersistentVector{Vector{Float64}}})
+    dst = Dict{PlaneKey, PersistentVector{Vector{Float64}}}()
+    for (k, holes) in src
+        dst[k] = pvec(map(hole -> transform_position(rigid_transform, hole), holes))
+    end
+    return dst
+end
+
+
 function transform(rigid_transform::RigidTransform{Float64}, beam::Beam)
     return Beam(compose(rigid_transform, beam.transform),
     beam.specs,
-    transform(rigid_transform, beam.polyhedron))
+    transform(rigid_transform, beam.polyhedron),
+    transform(rigid_transform, beam.drill_holes))
 end
 
 function set_transform(beam::Beam, new_transform::RigidTransform{Float64})
@@ -431,6 +547,10 @@ end
 
 function bounding_points(beam::Beam)::AbstractVector{Vector{Float64}}
     return bounding_points(beam.polyhedron)
+end
+
+function mid_point(beam::Beam)
+    return mid_point(beam.polyhedron)
 end
 
 function push_against(plane::Plane{Float64}, beam::Beam)
@@ -450,8 +570,117 @@ struct NamedPlane
     plane::Plane{Float64}
 end
 
+function contains_drill_hole(p::Polyhedron, k::PlaneKey, hole::Vector{Float64})
+    if !(haskey(p.planes, k))
+        return false
+    end
+    
+    for (k2, plane) in p.planes
+        if k != k2
+            if k != k2 && !(inside_halfspace(plane, hole))
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function refilter_drill_holes(beam::Beam)
+    dst = Dict{PlaneKey, PersistentVector{Vector{Float64}}}()
+    for (plane_key, drill_holes) in beam.drill_holes
+        filtered = filter(hole -> contains_drill_hole(beam.polyhedron, plane_key, hole), drill_holes)
+        if 0 < length(filtered)
+            dst[plane_key] = pvec(filtered)
+        end
+    end
+    return @set beam.drill_holes = dst
+end
+
 function cut(plane::NamedPlane, beam::Beam)
-    return @set beam.polyhedron = add_plane(beam.polyhedron, plane.name, plane.plane)
+    polyhedron = add_plane(beam.polyhedron, plane.name, plane.plane)
+    return refilter_drill_holes(@set beam.polyhedron = polyhedron)
+end
+
+function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
+    first_dir = beam_dir(first_beam)
+    second_dir = beam_dir(second_beam)
+    dir = normalize(cross(first_dir, second_dir))
+    a_pt = mid_point(first_beam)
+    b_pt = mid_point(second_beam)
+    diff = b_pt - a_pt
+    if dot(dir, diff) >= 0
+        return dir
+    else
+        return -dir
+    end
+end
+
+function base_drilling_dim(beam::Beam, drilling_dir::Vector{Float64})
+    local_drilling_dir = normalize(transform_direction(invert(beam.transform), drilling_dir))
+    if abs(dot(local_drilling_dir, local_x_dir)) < abs(dot(local_drilling_dir, local_y_dir))
+        return 1
+    else
+        return 2
+    end
+end
+
+struct DrillingPlaneSpecs
+    # How far from the bounding planes the drilling planes should be
+    marg::Real
+    
+    # Number of planes to generate
+    count::Integer 
+end
+
+function generate_drilling_planes(
+    beam::Beam, specs::DrillingPlaneSpecs, drilling_dir::Vector{Float64})::Vector{Plane{Float64}}
+    dim = base_drilling_dim(beam, drilling_dir)
+    (lower_key, upper_key) = plane_keys_per_beam_dim[dim]
+    lower_plane = beam.polyhedron.planes[lower_key]
+    upper_plane = beam.polyhedron.planes[upper_key]
+    dist = evaluate(lower_plane, pos_in_plane(upper_plane))
+    lower_offset = specs.marg
+    upper_offset = dist - specs.marg
+    dst = Vector{Plane{Float64}}()
+    if lower_offset >= upper_offset
+        return dst
+    end
+    step = (upper_offset - lower_offset)/(specs.count - 1)
+    return map(i -> translate(lower_plane, lower_offset + i*step), 0:(specs.count - 1))
+end
+
+struct Drill
+    line::ParameterizedLine{Float64}
+end
+
+function generate_drills(drilling_dir::Vector{Float64},
+    a_planes::Vector{Plane{Float64}},
+    b_planes::Vector{Plane{Float64}})::Vector{Drill}
+    dst = Vector{Drill}()
+    for a in a_planes
+        for b in b_planes
+            push!(dst, Drill(direct_like(intersect(a, b), drilling_dir)))
+        end
+    end
+    return dst
+end
+
+function drill(beam::Beam, drills::AbstractVector{Drill})
+    new_holes = Dict{PlaneKey, PersistentVector{Vector{Float64}}}()
+    for (plane_key, plane) in beam.polyhedron.planes
+        plane = normalize_plane(plane)
+        dst = get(beam.drill_holes, plane_key, pvec(Vector{Vector{Float64}}()))
+        for drill in drills
+            if dot(drill.line.dir, plane.normal) > 0
+                intersection = intersect(plane, drill.line)
+                if exists(intersection)
+                    dst = push(dst, evaluate(drill.line, intersection.lambda))
+                end
+            end
+        end
+        new_holes[plane_key] = dst
+    end
+    return refilter_drill_holes(@set beam.drill_holes = new_holes)
 end
 
 # What should be included with `using`.

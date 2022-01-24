@@ -59,6 +59,15 @@ end
                           bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 3.0]))
 end
 
+@testset "Parallel plane distance" begin
+    bp = Blueprint
+
+    a = bp.plane_at_pos([2.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    b = bp.plane_at_pos([-100.0, 0.0, 0.0], [7.0, 0.0, 0.0])
+    @test isapprox(6.0, bp.parallel_plane_distance(a, b), atol=1.0e-6)
+    @test isapprox(6.0, bp.parallel_plane_distance(b, a), atol=1.0e-6)
+end
+
 @testset "Polyhedron tests" begin
     bp = Blueprint
     planes = @Persistent Dict(:a => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
@@ -87,6 +96,25 @@ end
     @test [0.0, 0.0, 0.0] == polyhedron.corners[(:x, :y, :z)]
     @test [0.0, 0.0, 1.0] == polyhedron.corners[(:x, :xyz, :y)]
 end
+
+@testset "Polyhedron tests 3, redundant plane" begin
+    bp = Blueprint
+    planes = @Persistent Dict(:x => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+                              :y => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+                              :z => bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]),
+                              :xyz => bp.plane_at_pos([-1.0, -1.0, -1.0], [1.0, 0.0, 0.0]),
+                              :xyz2 => bp.plane_at_pos([-1.0, -1.0, -1.0], [1.1, 0.0, 0.0]))
+                              
+    polyhedron = bp.polyhedron_from_planes(planes)
+
+    @test 4 == length(polyhedron.planes)
+    @test 6 == length(polyhedron.bounded_lines)
+    @test 4 == length(polyhedron.corners)
+
+    @test [0.0, 0.0, 0.0] == polyhedron.corners[(:x, :y, :z)]
+    @test [0.0, 0.0, 1.0] == polyhedron.corners[(:x, :xyz, :y)]
+end
+
 
 @testset "Half-space test" begin
     bp = Blueprint
@@ -298,4 +326,61 @@ end
 
     beam2 = bp.cut(wall, beam)
     @test 4 == length(beam2.polyhedron.corners)
+end
+
+@testset "Drill test" begin
+    bp = Blueprint
+    bs = bp.BeamSpecs(1.0, 3.0)
+
+    A = bp.transform(bp.rigid_transform_from_translation([0.0, 0.0, 1.0]),
+                     bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir))
+    B = bp.orient_beam(bp.new_beam(bs), [0.0, 1.0, 0.0], bp.local_y_dir)
+
+    Apt = bp.mid_point(A)
+    Bpt = bp.mid_point(B)
+
+    dir = bp.compute_drilling_direction(A, B)
+    @test [0.0, 0.0, -1.0] == dir
+    @test [0.0, 0.0, 1.0] == bp.compute_drilling_direction(
+        A, bp.transform(bp.rigid_transform_from_translation([0.0, 0.0, 3.0]), B))
+    @test [0.0, 0.0, -1.0] == bp.compute_drilling_direction(
+        A, bp.transform(bp.rigid_transform_from_translation([0.0, 0.0, 0.3]), B))
+    @test [0.0, 0.0, 1.0] == bp.compute_drilling_direction(B, A)
+    
+    dp_specs = bp.DrillingPlaneSpecs(0.25, 2)
+
+    A_planes = bp.generate_drilling_planes(A, dp_specs, dir)
+    B_planes = bp.generate_drilling_planes(B, dp_specs, dir)
+
+    drills = bp.generate_drills(dir, A_planes, B_planes)
+
+    @test 4 == length(drills)
+    
+    for drill in drills
+        @test drill.line.dir == dir
+    end
+
+    A = bp.drill(A, drills)
+    @test 1 == length(A.drill_holes)
+    drill_holes = A.drill_holes[bp.beam_Y_upper]
+    @test 4 == length(drill_holes)
+    for (x, y, z) in drill_holes
+        @test z == 4.0
+    end
+
+    A2 = bp.transform(bp.rigid_transform_from_translation([0.0, 1000.0, 0.0]), A)
+    @test 1 == length(A2.drill_holes)
+    @test 4 == length(A2.drill_holes[bp.beam_Y_upper])
+    A2 = bp.drill(A2, drills)
+    @test 1 == length(A2.drill_holes)
+    @test 4 == length(A2.drill_holes[bp.beam_Y_upper])
+    
+    
+    
+    A3 = bp.transform(bp.rigid_transform_from_translation([0.0, 0.0001, 0.0]), A)
+    @test 1 == length(A3.drill_holes)
+    @test 4 == length(A3.drill_holes[bp.beam_Y_upper])
+    A3 = bp.drill(A3, drills)
+    @test 1 == length(A3.drill_holes)
+    @test 8 == length(A3.drill_holes[bp.beam_Y_upper])
 end
