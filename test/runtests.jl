@@ -88,14 +88,6 @@ end
     @test [0.0, 0.0, 1.0] == polyhedron.corners[(:x, :xyz, :y)]
 end
 
-@testset "Beam tests" begin
-    specs = Blueprint.BeamSpecs(1, 3)
-    f = Blueprint.beam_factory("Mjao", specs)
-    beam = Blueprint.new_beam!(f)
-    @test beam.name == "Mjao0"
-    @test f.counter == 1
-end
-
 @testset "Half-space test" begin
     bp = Blueprint
     plane = bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.5])
@@ -239,4 +231,71 @@ end
 
     X = [9.0, 4.7, 2.0]
     @test bp.evaluate(plane, X) == -bp.evaluate(plane2, X)
+end
+
+@testset "New beam test" begin
+    bp = Blueprint
+    specs = bp.BeamSpecs(1.0, 3.0)
+    beam = bp.new_beam(specs)
+    @test 4 == length(beam.polyhedron.planes)
+    @test 4 == length(beam.polyhedron.bounded_lines)
+    @test 0 == length(beam.polyhedron.corners)
+end
+
+@testset "Beam orientation transform" begin
+    bp = Blueprint
+    transform = bp.orient_beam_transform([1.0, 2.0, 0.0], [1.0, 1.0, 0.0])
+    RtR = transform.rotation'*transform.rotation
+    @test isapprox(RtR, Matrix(1.0I, 3, 3), atol=1.0e-6)
+
+    z_world = bp.transform_direction(transform, [0.0, 0.0, 1.0])
+    @test isapprox(z_world, normalize([1.0, 2.0, 0.0]), atol=1.0e-6)
+end
+
+@testset "Operations on transforms" begin
+    bp = Blueprint
+    a = bp.rigid_transform_from_xy_rotation(0.25pi, 3)
+    b = bp.rigid_transform_from_translation([3.0, 2.0, 1.5])
+
+    ab = bp.compose(a, b)
+
+    X = [0.1, 0.2, 4.7]
+    Y0 = bp.transform_position(a, bp.transform_position(b, X))
+    Y1 = bp.transform_position(ab, X)
+
+    ab_inv = bp.invert(ab)
+    
+    @test isapprox(Y0, Y1, atol=1.0e-6)
+    @test isapprox(X, bp.transform_position(ab_inv, Y1), atol=1.0e-6)
+end
+
+@testset "Oriented beam test" begin
+    bp = Blueprint
+    specs = bp.BeamSpecs(1.0, 3.0)
+    beam = bp.orient_beam(bp.new_beam(specs), [0.0, 1.0, 0.0], [1.0, 0.0, 0.0])
+    @test isapprox(beam.polyhedron.planes[:beam_X_lower].normal, [0.0, 0.0, 1.0], atol=1.0e-6)
+    @test isapprox(beam.polyhedron.planes[:beam_X_upper].normal, [0.0, 0.0, -1.0], atol=1.0e-6)
+    @test isapprox(beam.polyhedron.planes[:beam_Y_lower].normal, [1.0, 0.0, 0.0], atol=1.0e-6)
+    @test isapprox(beam.polyhedron.planes[:beam_Y_upper].normal, [-1.0, 0.0, 0.0], atol=1.0e-6)
+
+    @test 4 == length(bp.bounding_points(beam))
+
+    plane = bp.plane_at_pos([1.0, 0.0, 0.0], [-12.0, 0.0, 0.0])
+    floor = bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, -100.0])
+
+    beam = bp.push_against(floor, bp.push_against(plane, beam))
+
+    @test 0 == length(beam.polyhedron.corners)
+    pts = bp.bounding_points(beam)
+
+    @test 4 == length(pts)
+    @test -12.0 == minimum(map(xyz -> xyz[1], pts))
+    @test -100.0 == minimum(map(xyz -> xyz[3], pts))
+    @test -9.0 == maximum(map(xyz -> xyz[1], pts))
+    @test -99.0 == maximum(map(xyz -> xyz[3], pts))
+
+    wall = bp.NamedPlane(:wall, bp.plane_at_pos([0.0, -1.0, 0.0], [0.0, 0.0, 0.0]))
+
+    beam2 = bp.cut(wall, beam)
+    @test 4 == length(beam2.polyhedron.corners)
 end
