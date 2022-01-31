@@ -4,9 +4,14 @@ using FunctionalCollections
 using LinearAlgebra
 using Setfield
 
+abstract type PhysicalObject end
+
 ### Planes
 
 const PlaneKey = Symbol
+const PlaneKeyTuple2 = Tuple{PlaneKey, PlaneKey}
+const PlaneKeyTuple3 = Tuple{PlaneKey, PlaneKey, PlaneKey}
+
 
 ## Represents the plane normal*X = offset
 struct Plane{T}
@@ -461,18 +466,32 @@ const beam_Y_lower = :beam_Y_lower
 const beam_Y_upper = :beam_Y_upper
 const plane_keys_per_beam_dim = [(beam_X_lower, beam_X_upper), (beam_Y_lower, beam_Y_upper)]
 
+struct RgbColor
+    # in ranges 0..1
+    red::Float64
+    green::Float64
+    blue::Float64
+end
+
 struct BeamSpecs
     Xsize::Real
     Ysize::Real
 
+    color::RgbColor
     # The Z direction is the direction of the beam
 end
 
-function quadratic_beam_specs(size::Real)
-    return BeamSpecs(size, size)
+default_beam_color = RgbColor(0.0, 0.0, 1.0)
+
+function beam_specs(Xsize::Real, Ysize::Real)
+    return BeamSpecs(Xsize, Ysize, default_beam_color)
 end
 
-struct Beam
+function quadratic_beam_specs(size::Real)
+    return beam_specs(size, size)
+end
+
+struct Beam <: PhysicalObject
     transform::RigidTransform{Float64}
     specs::BeamSpecs
     polyhedron::Polyhedron
@@ -683,7 +702,147 @@ function drill(beam::Beam, drills::AbstractVector{Drill})
     return refilter_drill_holes(@set beam.drill_holes = new_holes)
 end
 
+
+
+function remove_from_tuple(x, k)
+    return Tuple(filter(k2 -> k2 != k, x))
+end
+
+function plane_corner_keys(phd::Polyhedron, pk::PlaneKey)
+    return [remove_from_tuple(k, pk) for (k, v) in phd.corners if pk in k]
+end
+
+function are_connected(a::Tuple{PlaneKey,PlaneKey}, b::Tuple{PlaneKey,PlaneKey})
+    return (a[1] in b) || (a[2] in b)
+end
+
+function acc!(dst::Dict{PlaneKeyTuple2, Vector{PlaneKeyTuple2}}, a::PlaneKeyTuple2, b::PlaneKeyTuple2)
+    if !(haskey(dst, a))
+        dst[a] = Vector{PlaneKeyTuple2}()
+    end
+    push!(dst[a], b)
+end
+
+function compute_corner_loop(corners::Vector{PlaneKeyTuple2})::Vector{PlaneKeyTuple2}
+    n = length(corners)
+    if n < 3
+        return []
+    end
+    
+    neighbors = Dict{PlaneKeyTuple2, Vector{PlaneKeyTuple2}}()
+    for a in corners
+        for b in corners
+            if a < b && are_connected(a, b)
+                acc!(neighbors, a, b)
+                acc!(neighbors, b, a)
+            end
+        end
+    end
+
+    visited = Set{PlaneKeyTuple2}()
+    dst = Vector{PlaneKeyTuple2}()
+
+    function visit!(x::PlaneKeyTuple2)
+        @assert !(x in visited)
+        push!(dst, x)
+        push!(visited, x)
+    end
+
+    start = corners[1]
+    at = start
+    while true
+        visit!(at)
+
+        found = at
+        for next in neighbors[at]
+            if !(next in visited)
+                found = next
+                break
+            end
+        end
+
+        if found == at
+            break
+        else
+            at = found
+        end
+    end
+    if length(visited) == n && are_connected(start, at)
+        return dst
+    else
+        return []
+    end
+end
+
+struct Vertex
+    position::Vector{Float64}
+    color::RgbColor
+end
+
+Facet = Tuple{Integer, Integer, Integer}
+
+struct TriMesh
+    vertices::Vector{Vertex}
+    facets::Vector{Facet}
+end
+
+function mesh_from_physical_object(beam::Beam)
+    polyhedron = beam.polyhedron
+    vertex_count = length(polyhedron.corners)
+    vertices = Vector{Vertex}()
+    vertex_index_map = Dict{PlaneKeyTuple3, Integer}()
+
+    cog = [0.0, 0.0, 0.0]
+    for (k, v) in polyhedron.corners
+        index = length(vertex_index_map)+1
+        vertex_index_map[k] = index
+        cog += v
+        push!(vertices, Vertex(v, beam.specs.color))
+    end
+
+    cog *= (1.0/vertex_count)
+
+    facets = Vector{Facet}()
+    for (k, v) in polyhedron.planes
+        ks = plane_corner_keys(polyhedron, k)
+        loop = compute_corner_loop(ks)
+
+        function vind(i::Integer)
+            (a, b) = loop[i]
+            return vertex_index_map[ordered_triplet(k, a, b)]
+        end
+        
+        m = length(loop)
+        if 0 < m
+            for j in 2:(m-1)
+                facet = (vind(1), vind(j), vind(j+1))
+                (i0, i1, i2) = facet
+                (v0, v1, v2) = [vertices[i].position for i in facet]
+                at = (1.0/3)*(v0 + v1 + v2)
+                normal = cross(v1 - v0, v2 - v0)
+                if dot(normal, at - cog) < 0
+                    facet = reverse(facet)
+                end
+                push!(facets, facet)
+            end
+        end
+    end
+    return TriMesh(vertices, facets)
+end
+
+function wavefront_obj_string(mesh::TriMesh)
+    buf = IOBuffer()
+    for v in mesh.vertices
+        (x, y, z) = v.position
+        println(buf, string("v ", x, " ", y, " ", z))
+    end
+    for (i, j, k) in mesh.facets
+        println(buf, string("f ", i, " ", j, " ", k))
+    end
+    return String(take!(buf))
+end
+
 # What should be included with `using`.
-export plane_at_pos, BeamSpecs, beam_factory, new_beam
+#export demo
 
 end # module

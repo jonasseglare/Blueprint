@@ -263,7 +263,7 @@ end
 
 @testset "New beam test" begin
     bp = Blueprint
-    specs = bp.BeamSpecs(1.0, 3.0)
+    specs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color)
     beam = bp.new_beam(specs)
     @test 4 == length(beam.polyhedron.planes)
     @test 4 == length(beam.polyhedron.bounded_lines)
@@ -299,7 +299,7 @@ end
 
 @testset "Oriented beam test" begin
     bp = Blueprint
-    specs = bp.BeamSpecs(1.0, 3.0)
+    specs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color)
     beam = bp.orient_beam(bp.new_beam(specs), [0.0, 1.0, 0.0], [1.0, 0.0, 0.0])
     @test isapprox(beam.polyhedron.planes[:beam_X_lower].normal, [0.0, 0.0, 1.0], atol=1.0e-6)
     @test isapprox(beam.polyhedron.planes[:beam_X_upper].normal, [0.0, 0.0, -1.0], atol=1.0e-6)
@@ -330,7 +330,7 @@ end
 
 @testset "Drill test" begin
     bp = Blueprint
-    bs = bp.BeamSpecs(1.0, 3.0)
+    bs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color)
 
     A = bp.transform(bp.rigid_transform_from_translation([0.0, 0.0, 1.0]),
                      bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir))
@@ -383,4 +383,19 @@ end
     A3 = bp.drill(A3, drills)
     @test 1 == length(A3.drill_holes)
     @test 8 == length(A3.drill_holes[bp.beam_Y_upper])
+end
+
+@testset "Obj export test" begin
+    bp = Blueprint
+    bs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color)
+    beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
+
+    a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [2.0, 0.0, 0.0]))
+
+    beam = bp.cut(a, bp.cut(b, beam))
+
+    mesh = bp.mesh_from_physical_object(beam)
+    obj = bp.wavefront_obj_string(mesh)
+    @test occursin("f 1 3 5", obj)
 end
