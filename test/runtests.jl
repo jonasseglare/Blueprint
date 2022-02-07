@@ -16,6 +16,25 @@ using LinearAlgebra
 #import .Blueprint
 
 
+@testset "Interval tests" begin
+    bp = Blueprint
+    x = bp.extend(bp.extend(bp.undefined_interval(), 3.0), 4.5)
+    @test bp.is_defined(x)
+    @test x.lower == 3.0
+    @test x.upper == 4.5
+end
+
+@testset "Bounding box test" begin
+    points = [[1.0, 2.3], [0.3, 5.9], [2.0, 0.1]]
+    bp = Blueprint
+    bbox = bp.compute_bbox(points)
+    @test bbox.intervals[1].lower == 0.3
+    @test bbox.intervals[1].upper == 2.0
+    
+    @test bbox.intervals[2].lower == 0.1
+    @test bbox.intervals[2].upper == 5.9
+end
+
 @testset "Plane tests" begin
     @test Blueprint.plane_at_pos([1, 2, 3], [3, 3, 7]).offset == 30.0
 
@@ -361,28 +380,29 @@ end
     end
 
     A = bp.drill(A, drills)
-    @test 1 == length(A.drill_holes)
-    drill_holes = A.drill_holes[bp.beam_Y_upper]
+    @test 1 == length(A.annotations)
+    drill_holes = A.annotations[bp.beam_Y_upper]
     @test 4 == length(drill_holes)
-    for (x, y, z) in drill_holes
+    for annotation in drill_holes
+        (x, y, z) = annotation.position
         @test z == 4.0
     end
 
     A2 = bp.transform(bp.rigid_transform_from_translation([0.0, 1000.0, 0.0]), A)
-    @test 1 == length(A2.drill_holes)
-    @test 4 == length(A2.drill_holes[bp.beam_Y_upper])
+    @test 1 == length(A2.annotations)
+    @test 4 == length(A2.annotations[bp.beam_Y_upper])
     A2 = bp.drill(A2, drills)
-    @test 1 == length(A2.drill_holes)
-    @test 4 == length(A2.drill_holes[bp.beam_Y_upper])
+    @test 1 == length(A2.annotations)
+    @test 4 == length(A2.annotations[bp.beam_Y_upper])
     
     
     
     A3 = bp.transform(bp.rigid_transform_from_translation([0.0, 0.0001, 0.0]), A)
-    @test 1 == length(A3.drill_holes)
-    @test 4 == length(A3.drill_holes[bp.beam_Y_upper])
+    @test 1 == length(A3.annotations)
+    @test 4 == length(A3.annotations[bp.beam_Y_upper])
     A3 = bp.drill(A3, drills)
-    @test 1 == length(A3.drill_holes)
-    @test 8 == length(A3.drill_holes[bp.beam_Y_upper])
+    @test 1 == length(A3.annotations)
+    @test 8 == length(A3.annotations[bp.beam_Y_upper])
 end
 
 @testset "Obj export test" begin
@@ -391,11 +411,19 @@ end
     beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
 
     a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
-    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [2.0, 0.0, 0.0]))
+    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
 
     beam = bp.cut(a, bp.cut(b, beam))
 
     mesh = bp.mesh_from_physical_object(beam)
     obj = bp.wavefront_obj_string(mesh)
     @test occursin("f 1 3 5", obj)
+
+    k = :beam_X_lower
+    @test haskey(beam.polyhedron.planes, k)
+
+    plan = bp.cutting_plan(beam, k)
+
+    @test bp.plan_width(plan) == 3.0
+    @test bp.plan_length(plan) == 4.5
 end

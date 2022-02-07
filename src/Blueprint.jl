@@ -12,6 +12,54 @@ const PlaneKey = Symbol
 const PlaneKeyTuple2 = Tuple{PlaneKey, PlaneKey}
 const PlaneKeyTuple3 = Tuple{PlaneKey, PlaneKey, PlaneKey}
 
+struct DefinedInterval{T}
+    lower::T
+    upper::T
+end
+
+function width(interval::DefinedInterval{T}) where {T}
+    return interval.upper - interval.lower
+end
+
+const Interval = Union{DefinedInterval{T}, Nothing} where {T}
+
+function undefined_interval() where {T}
+    return nothing
+end
+
+function is_defined(x::Interval{T}) where {T}
+    return x != nothing
+end
+
+function extend(interval::Interval{T}, x::T) where {T}
+    if is_defined(interval)
+        return DefinedInterval{T}(min(interval.lower, x), max(interval.upper, x))
+    else
+        return DefinedInterval{T}(x, x)
+    end
+end
+
+struct BBox{T}
+    intervals::Vector{Interval{T}}
+end
+
+function compute_bbox(points::AbstractVector{Vector{T}}) where {T}
+    if length(points) == 0
+        return BBox{T}([])
+    end
+    
+    m = length(points)
+    n = length(points[1])
+    dst = Vector{Interval{T}}(undefined_interval(), n)
+    for point in points
+        for i in 1:n
+            result = extend(dst[i], point[i])
+            dst[i] = result
+        end
+    end
+    return BBox{T}(dst)
+end
+
 
 ## Represents the plane normal*X = offset
 struct Plane{T}
@@ -192,6 +240,11 @@ end
 
 function ordered_triplet(a::PlaneKey, b::PlaneKey, c::PlaneKey)
     Tuple(sort([a, b, c]))
+end
+
+function ordered_triplet(ab::Tuple{PlaneKey, PlaneKey}, c::PlaneKey)
+    (a, b) = ab
+    return ordered_triplet(a, b, c)
 end
 
 struct PlaneBound
@@ -491,11 +544,17 @@ function quadratic_beam_specs(size::Real)
     return beam_specs(size, size)
 end
 
+struct Annotation
+    position::Vector{Float64}
+    label::String
+end
+
+
 struct Beam <: PhysicalObject
     transform::RigidTransform{Float64}
     specs::BeamSpecs
     polyhedron::Polyhedron
-    drill_holes::AbstractDict{PlaneKey, PersistentVector{Vector{Float64}}}
+    annotations::AbstractDict{PlaneKey, PersistentVector{Annotation}}
 end
 
 function new_beam(beam_specs::BeamSpecs)
@@ -507,7 +566,7 @@ function new_beam(beam_specs::BeamSpecs)
                                 beam_X_upper => flip(plane_at_dim(1, beam_specs.Xsize)),
                                 beam_Y_lower => ylow,
                                 beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))),
-                Dict{PlaneKey, PersistentVector{Vector{Float64}}}())
+                Dict{PlaneKey, PersistentVector{Annotation}}())
 end
 
 function beam_dir(beam::Beam)
@@ -538,10 +597,14 @@ function orient_beam_transform(world_dir::Vector{Float64}, up_in_beam_coordinate
 end
 
 function transform(rigid_transform::RigidTransform{Float64},
-    src::AbstractDict{PlaneKey, PersistentVector{Vector{Float64}}})
-    dst = Dict{PlaneKey, PersistentVector{Vector{Float64}}}()
-    for (k, holes) in src
-        dst[k] = pvec(map(hole -> transform_position(rigid_transform, hole), holes))
+    src::AbstractDict{PlaneKey, PersistentVector{Annotation}})
+    dst = Dict{PlaneKey, PersistentVector{Annotation}}()
+    for (k, annotations) in src
+        
+        #dst[k] = pvec(map(annotation -> @set annotation.position = transform_position(rigid_transform, annotation.position), annotations))
+        new_annots = [@set annotation.position = transform_position(
+            rigid_transform, annotation.position) for annotation in annotations]
+        dst[k] = pvec(new_annots)
     end
     return dst
 end
@@ -551,7 +614,7 @@ function transform(rigid_transform::RigidTransform{Float64}, beam::Beam)
     return Beam(compose(rigid_transform, beam.transform),
     beam.specs,
     transform(rigid_transform, beam.polyhedron),
-    transform(rigid_transform, beam.drill_holes))
+    transform(rigid_transform, beam.annotations))
 end
 
 function set_transform(beam::Beam, new_transform::RigidTransform{Float64})
@@ -589,14 +652,14 @@ struct NamedPlane
     plane::Plane{Float64}
 end
 
-function contains_drill_hole(p::Polyhedron, k::PlaneKey, hole::Vector{Float64})
+function contains_annotation(p::Polyhedron, k::PlaneKey, x::Vector{Float64})
     if !(haskey(p.planes, k))
         return false
     end
     
     for (k2, plane) in p.planes
         if k != k2
-            if k != k2 && !(inside_halfspace(plane, hole))
+            if k != k2 && !(inside_halfspace(plane, x))
                 return false
             end
         end
@@ -604,20 +667,20 @@ function contains_drill_hole(p::Polyhedron, k::PlaneKey, hole::Vector{Float64})
     return true
 end
 
-function refilter_drill_holes(beam::Beam)
-    dst = Dict{PlaneKey, PersistentVector{Vector{Float64}}}()
-    for (plane_key, drill_holes) in beam.drill_holes
-        filtered = filter(hole -> contains_drill_hole(beam.polyhedron, plane_key, hole), drill_holes)
+function refilter_annotations(beam::Beam)
+    dst = Dict{PlaneKey, PersistentVector{Annotation}}()
+    for (plane_key, annotations) in beam.annotations
+        filtered = filter(annotation -> contains_annotation(beam.polyhedron, plane_key, annotation.position), annotations)
         if 0 < length(filtered)
             dst[plane_key] = pvec(filtered)
         end
     end
-    return @set beam.drill_holes = dst
+    return @set beam.annotations = dst
 end
 
 function cut(plane::NamedPlane, beam::Beam)
     polyhedron = add_plane(beam.polyhedron, plane.name, plane.plane)
-    return refilter_drill_holes(@set beam.polyhedron = polyhedron)
+    return refilter_annotations(@set beam.polyhedron = polyhedron)
 end
 
 function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
@@ -669,6 +732,7 @@ function generate_drilling_planes(
 end
 
 struct Drill
+    label::String
     line::ParameterizedLine{Float64}
 end
 
@@ -678,28 +742,28 @@ function generate_drills(drilling_dir::Vector{Float64},
     dst = Vector{Drill}()
     for a in a_planes
         for b in b_planes
-            push!(dst, Drill(direct_like(intersect(a, b), drilling_dir)))
+            push!(dst, Drill("Drill", direct_like(intersect(a, b), drilling_dir)))
         end
     end
     return dst
 end
 
 function drill(beam::Beam, drills::AbstractVector{Drill})
-    new_holes = Dict{PlaneKey, PersistentVector{Vector{Float64}}}()
+    new_annotations = Dict{PlaneKey, PersistentVector{Annotation}}()
     for (plane_key, plane) in beam.polyhedron.planes
         plane = normalize_plane(plane)
-        dst = get(beam.drill_holes, plane_key, pvec(Vector{Vector{Float64}}()))
+        dst = get(beam.annotations, plane_key, pvec(Vector{Annotation}()))
         for drill in drills
             if dot(drill.line.dir, plane.normal) > 0
                 intersection = intersect(plane, drill.line)
                 if exists(intersection)
-                    dst = push(dst, evaluate(drill.line, intersection.lambda))
+                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), drill.label))
                 end
             end
         end
-        new_holes[plane_key] = dst
+        new_annotations[plane_key] = dst
     end
-    return refilter_drill_holes(@set beam.drill_holes = new_holes)
+    return refilter_annotations(@set beam.annotations = new_annotations)
 end
 
 
@@ -836,6 +900,71 @@ function wavefront_obj_string(mesh::TriMesh)
     end
     return String(take!(buf))
 end
+
+struct CornerPosition
+    key::PlaneKeyTuple3
+    position::Vector{Float64}
+end
+
+struct BeamCuttingPlan
+    plane_key::PlaneKey
+    corners::Vector{CornerPosition}
+    annotations::Vector{Annotation}
+    bbox::BBox{Float64}
+end
+
+function plane_cog(polyhedron::Polyhedron, pk::PlaneKey)
+    corners = [v for (k, v) in polyhedron.corners if pk in k]
+    return (1.0/length(corners))*reduce(+, corners)
+end
+
+function plane_cog(beam::Beam, k::PlaneKey)
+    return plane_cog(beam.polyhedron, k)
+end
+
+
+
+function beam_cutting_plan(plane_key::PlaneKey, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
+    return BeamCuttingPlan(plane_key, corners, annotations, compute_bbox([corner.position for corner in corners]))
+end
+
+function cutting_plan(beam::Beam, k::PlaneKey, specified_beam_dir::Vector{Float64})
+    z = normalize(beam.polyhedron.planes[k].normal)
+    x = cross(specified_beam_dir, z)
+    @assert 0 < norm(x)
+    x = normalize(x)
+
+    y = cross(z, x)
+
+    cog = plane_cog(beam, k)
+    basis = [x y z]
+    world_local = RigidTransform(basis, cog)
+    local_world = invert(world_local)
+
+    loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
+    @assert 0 < length(loop)
+
+    function localize(X)
+        return transform_position(local_world, X)[1:2]
+    end
+    
+    corners = [CornerPosition(corner, localize(beam.polyhedron.corners[corner])) for corner in loop]
+    annotations = [@set annotation.position = localize(annotation.position) for annotation in get(beam.annotations, k, PersistentVector{Annotation}())]
+    return beam_cutting_plan(k, corners, annotations)
+end
+
+function cutting_plan(beam::Beam, k::PlaneKey)
+    return cutting_plan(beam, k, beam_dir(beam))
+end
+
+function plan_width(cp::BeamCuttingPlan)
+    return width(cp.bbox.intervals[1])
+end
+
+function plan_length(cp::BeamCuttingPlan)
+    return width(cp.bbox.intervals[2])
+end
+
 
 # What should be included with `using`.
 #export demo
