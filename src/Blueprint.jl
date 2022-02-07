@@ -792,15 +792,11 @@ function mesh_from_physical_object(beam::Beam)
     vertices = Vector{Vertex}()
     vertex_index_map = Dict{PlaneKeyTuple3, Integer}()
 
-    cog = [0.0, 0.0, 0.0]
     for (k, v) in polyhedron.corners
         index = length(vertex_index_map)+1
         vertex_index_map[k] = index
-        cog += v
         push!(vertices, Vertex(v, beam.specs.color))
     end
-
-    cog *= (1.0/vertex_count)
 
     facets = Vector{Facet}()
     for (k, v) in polyhedron.planes
@@ -818,9 +814,8 @@ function mesh_from_physical_object(beam::Beam)
                 facet = (vind(1), vind(j), vind(j+1))
                 (i0, i1, i2) = facet
                 (v0, v1, v2) = [vertices[i].position for i in facet]
-                at = (1.0/3)*(v0 + v1 + v2)
                 normal = cross(v1 - v0, v2 - v0)
-                if dot(normal, at - cog) < 0
+                if dot(normal, v.normal) > 0
                     facet = reverse(facet)
                 end
                 push!(facets, facet)
