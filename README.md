@@ -58,13 +58,22 @@ Parts:
 
 See commit: [Add mesh export](https://github.com/jonasseglare/Blueprint/commit/aaf4c05bc53a8932252f28686abfc22ed58b5685)
 
-### Task: Render diagram [rdap: 0% done]
+### Task: Organize and render diagram [rdap: 0% done]
 
 Steps:
 
 * Givet en beam och en sida, exportera CuttingPlan
-* Use Cairo/Luxor to 
-* merge
+  - Borrhål
+  - Hur man ska såga (konturen)
+* Givet flera cutting plans för samma beam-typ, optimera dessa givet brädans längd. Det ger oss en sammansatt cutting plan.
+* Rendera diagram med hjälp av Luxor eller Cairo, till PDF kanske.
+* Merge
+
+### Task: Exportera tabell med mått
+
+Detta är en fortsättning på den andra uppgiften.
+
+* Givet en cutting plan, mata ut 
 
 ### Task: Design insulation boards [rdap: 0% done]
 
