@@ -36,11 +36,15 @@ https://discourse.julialang.org/t/inheriting-package-dependencies-in-test-enviro
 
 [Revise based workflows](https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows)
 
-## Objective: A CAD-modeling library for woodworking
+## Objective: A CAD-modeling library for woodworking [rdap: 33% done]
 
 This plan conforms with Roamdap.
+An Objective is done when all subtasks and subtasks are done, thereby acting like a grouping.
+A Task is done when it has at least one subsection marked done.
+A Task can be marked closed if it is no longer pursued. It cannot at the same time be done.
+A Task is open as long as it is not closed or done.
 
-### Task: Export to 3D
+### Task: Export to 3D [rdap: 100% done]
 
 Parts:
 
@@ -54,7 +58,7 @@ Parts:
 
 See commit: [Add mesh export](https://github.com/jonasseglare/Blueprint/commit/aaf4c05bc53a8932252f28686abfc22ed58b5685)
 
-### Task: Render diagram
+### Task: Render diagram [rdap: 0% done]
 
 Steps:
 
@@ -62,7 +66,7 @@ Steps:
 * Use Cairo/Luxor to 
 * merge
 
-### Task: Design insulation boards
+### Task: Design insulation boards [rdap: 0% done]
 
 * Make a new module
 * Make the design
@@ -70,4 +74,6 @@ Steps:
 * Render diagram
 * Merge
 
+### Roamdap summary
 
+Todo
