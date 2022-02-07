@@ -35,3 +35,27 @@ https://discourse.julialang.org/t/inheriting-package-dependencies-in-test-enviro
 ### Module reloading
 
 [Revise based workflows](https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows)
+
+## Objective: A CAD-modeling library for woordworking
+
+### Task: Export to 3D
+
+Parts:
+
+* Create a sample drawing
+* Implement colors (RgbColor) for BeamSpec
+* Mesh from a beam, from polyhedron
+* Export mesh, visualize
+* Merge
+
+#### Done
+
+See commit: [Add mesh export](https://github.com/jonasseglare/Blueprint/commit/aaf4c05bc53a8932252f28686abfc22ed58b5685)
+
+### Task: Render diagram
+
+Steps:
+
+* Givet en beam och en sida, exportera CuttingPlan
+* Use Cairo/Luxor to 
+* merge
