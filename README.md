@@ -36,7 +36,9 @@ https://discourse.julialang.org/t/inheriting-package-dependencies-in-test-enviro
 
 [Revise based workflows](https://docs.julialang.org/en/v1/manual/workflow-tips/#Revise-based-workflows)
 
-## Objective: A CAD-modeling library for woordworking
+## Objective: A CAD-modeling library for woodworking
+
+This plan conforms with Roamdap.
 
 ### Task: Export to 3D
 
@@ -59,3 +61,13 @@ Steps:
 * Givet en beam och en sida, exportera CuttingPlan
 * Use Cairo/Luxor to 
 * merge
+
+### Task: Design insulation boards
+
+* Make a new module
+* Make the design
+* Render 3D
+* Render diagram
+* Merge
+
+
