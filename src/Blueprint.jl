@@ -4,6 +4,10 @@ using FunctionalCollections
 using LinearAlgebra
 using Setfield
 
+#using Luxor
+import Luxor
+const lx = Luxor
+
 abstract type PhysicalObject end
 
 ### Planes
@@ -906,10 +910,21 @@ struct CornerPosition
     position::Vector{Float64}
 end
 
+# All coordinates are in a local coordinate system.
+# The y axis points in the direction of the beam.
+# The x axis points to the side.
+# The z (which is not used) is in the normal of the plane.
 struct BeamCuttingPlan
+    # The plane that is used for the plan
     plane_key::PlaneKey
+
+    # The sequence of corners
     corners::Vector{CornerPosition}
+
+    # Any annotationss
     annotations::Vector{Annotation}
+
+    # The bounding box
     bbox::BBox{Float64}
 end
 
@@ -922,13 +937,20 @@ function plane_cog(beam::Beam, k::PlaneKey)
     return plane_cog(beam.polyhedron, k)
 end
 
-
-
+# Constructs a cutting plan for a beam.
 function beam_cutting_plan(plane_key::PlaneKey, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
     return BeamCuttingPlan(plane_key, corners, annotations, compute_bbox([corner.position for corner in corners]))
 end
 
-function cutting_plan(beam::Beam, k::PlaneKey, specified_beam_dir::Vector{Float64})
+function cutting_plan(
+    # The beam for which to generate a plane
+    beam::Beam,
+
+    # The plane for the plan
+    k::PlaneKey,
+
+    # The direction of the beam
+    specified_beam_dir::Vector{Float64})
     z = normalize(beam.polyhedron.planes[k].normal)
     x = cross(specified_beam_dir, z)
     @assert 0 < norm(x)
@@ -965,8 +987,107 @@ function plan_length(cp::BeamCuttingPlan)
     return width(cp.bbox.intervals[2])
 end
 
+function lx_point(v)
+    return lx.Point(v[1], v[2])
+end
 
-# What should be included with `using`.
-#export demo
+struct RenderConfig
+    scale::Number
+end
+
+const default_render_config = RenderConfig(100)
+
+function solve_plane_key(ikey::PlaneKeyTuple3, jkey::PlaneKeyTuple3)
+    return none
+end
+
+function render_cutting_plan(cp::BeamCuttingPlan, render_config::RenderConfig)
+    if false
+        @lx.png begin
+            println("\n\n\nHERE WE ARE!!!!!")
+            radius=80
+            lx.setdash("dot")
+            lx.sethue("gray30")
+            A, B = [lx.Point(x, 0) for x in [-radius, radius]]
+            lx.line(A, B, :stroke)
+            # lx.circle(lx.Point(0, 0), radius, :stroke)
+            # lx.label("A", :NW, A)
+            # lx.label("O", :N,  lx.O)
+            # lx.label("B", :NE, B)
+
+            # lx.circle.([A, lx.O, B], 2, :fill)
+            # lx.circle.([A, B], 2radius, :stroke)
+        end
+    end
+
+    # @png begin
+    #     radius=80
+    #     setdash("dot")
+    #     sethue("gray30")
+    #     A, B = [Point(x, 0) for x in [-radius, radius]]
+    #     line(A, B, :stroke)
+    #     circle(Point(0, 0), radius, :stroke)
+    #     # >>>>
+    #     label("A", :NW, A)
+    #     label("O", :N,  O)
+    #     label("B", :NE, B)
+
+    #     circle.([A, O, B], 2, :fill)
+    #     circle.([A, B], 2radius, :stroke)
+    # end
+    # if false
+    #     @lx.png begin
+    #         println("HERE WE ARE")
+    #         radius=80
+    #         lx.setdash("dot")
+    #         lx.sethue("gray30")
+    #         A, B = [lx.Point(x, 0) for x in [-radius, radius]]
+    #         lx.line(A, B, :stroke)
+    #         lx.circle(lx.Point(0, 0), radius, :stroke)
+    #         lx.label("A", :NW, A)
+    #         lx.label("O", :N,  lx.O)
+    #         lx.label("B", :NE, B)
+
+    #         lx.circle.([A, lx.O, B], 2, :fill)
+    #         lx.circle.([A, B], 2radius, :stroke)
+    #     end
+    # end
+
+    if true
+        @lx.pdf begin
+            lx.scale(render_config.scale)
+            n = length(cp.corners)
+            lx.setdash("solid")
+            positions = [lx_point(corner.position) for corner in cp.corners]
+            println(string("Render ", length(positions), " positions."))
+            println(string(positions))
+            for i in 1:n
+                println(cp.corners[i].key)
+                lx.line(positions[i], positions[mod1(i+1, n)], :stroke)
+            end
+        end
+    end
+end
+# Rendering plans
+# http://juliagraphics.github.io/Luxor.jl/stable/
+
+function demo()
+    bs = BeamSpecs(1.0, 3.0, default_beam_color)
+    beam = orient_beam(new_beam(bs), [1.0, 0.0, 0.0], local_y_dir)
+
+    a = NamedPlane(:a, plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = NamedPlane(:b, plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+
+    beam = cut(a, cut(b, beam))
+
+    k = :beam_X_lower
+    
+    plan = cutting_plan(beam, k)
+
+    render_cutting_plan(plan, default_render_config)
+end
+
+
+export demo # Load the module and call Blueprint.demo() in the REPL.
 
 end # module
