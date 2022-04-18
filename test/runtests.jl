@@ -415,10 +415,12 @@ end
 
     beam = bp.cut(a, bp.cut(b, beam))
 
+    # Export wavefront obj
     mesh = bp.mesh_from_physical_object(beam)
     obj = bp.wavefront_obj_string(mesh)
     @test occursin("f 1 3 5", obj)
 
+    
     k = :beam_X_lower
     @test haskey(beam.polyhedron.planes, k)
 
@@ -426,4 +428,6 @@ end
 
     @test bp.plan_width(plan) == 3.0
     @test bp.plan_length(plan) == 4.5
+
+    @test 4 == length(plan.corners)
 end

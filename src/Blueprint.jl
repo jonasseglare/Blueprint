@@ -4,6 +4,10 @@ using FunctionalCollections
 using LinearAlgebra
 using Setfield
 
+#using Luxor
+import Luxor
+const lx = Luxor
+
 abstract type PhysicalObject end
 
 ### Planes
@@ -906,10 +910,21 @@ struct CornerPosition
     position::Vector{Float64}
 end
 
+# All coordinates are in a local coordinate system.
+# The y axis points in the direction of the beam.
+# The x axis points to the side.
+# The z (which is not used) is in the normal of the plane.
 struct BeamCuttingPlan
+    # The plane that is used for the plan
     plane_key::PlaneKey
+
+    # The sequence of corners
     corners::Vector{CornerPosition}
+
+    # Any annotationss
     annotations::Vector{Annotation}
+
+    # The bounding box
     bbox::BBox{Float64}
 end
 
@@ -922,14 +937,25 @@ function plane_cog(beam::Beam, k::PlaneKey)
     return plane_cog(beam.polyhedron, k)
 end
 
-
-
+# Constructs a cutting plan for a beam.
 function beam_cutting_plan(plane_key::PlaneKey, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
     return BeamCuttingPlan(plane_key, corners, annotations, compute_bbox([corner.position for corner in corners]))
 end
 
-function cutting_plan(beam::Beam, k::PlaneKey, specified_beam_dir::Vector{Float64})
-    z = normalize(beam.polyhedron.planes[k].normal)
+function cutting_plan(
+    # The beam for which to generate a plane
+    beam::Beam,
+
+    # The plane for the plan
+    k::PlaneKey,
+
+    # The direction of the beam
+    specified_beam_dir::Vector{Float64})
+
+    # The normal of the plane is pointing inward.
+    # Flip it so that it points outwards.
+    z = -normalize(beam.polyhedron.planes[k].normal)
+    
     x = cross(specified_beam_dir, z)
     @assert 0 < norm(x)
     x = normalize(x)
@@ -940,6 +966,8 @@ function cutting_plan(beam::Beam, k::PlaneKey, specified_beam_dir::Vector{Float6
     basis = [x y z]
     world_local = RigidTransform(basis, cog)
     local_world = invert(world_local)
+
+    println(string("DET: ", det(basis)))
 
     loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
     @assert 0 < length(loop)
@@ -965,8 +993,82 @@ function plan_length(cp::BeamCuttingPlan)
     return width(cp.bbox.intervals[2])
 end
 
+function lx_point(v)
+    return lx.Point(v[1], v[2])
+end
 
-# What should be included with `using`.
-#export demo
+struct RenderConfig
+    render_factor::Number
+    fontsize::Number
+end
+
+const default_render_config = RenderConfig(100, 12)
+
+function solve_plane_key(ikey::PlaneKeyTuple3, jkey::PlaneKeyTuple3)
+    return none
+end
+
+function average(positions)
+    return (1.0/length(positions))*reduce(+, positions)
+end
+
+
+function render_cutting_plan(cp::BeamCuttingPlan, render_config::RenderConfig)
+    function local_pt(x)
+        return lx_point(render_config.render_factor*x)
+    end
+    
+    @lx.pdf begin
+        lx.fontsize(render_config.fontsize)
+        n = length(cp.corners)
+        lx.setdash("solid")
+        positions = [local_pt(corner.position) for corner in cp.corners]
+        mid = average(positions)
+        lx.poly(positions, :stroke, close=true)
+        lx.label.([string(corner.key) for corner in cp.corners], lx.slope.(mid, positions), positions, offset=5)
+        lx.rulers()
+    end
+end
+# Rendering plans
+# http://juliagraphics.github.io/Luxor.jl/stable/
+
+function demo()
+    bs = BeamSpecs(1.0, 3.0, default_beam_color)
+
+    # Create a new beam that points in the X direction.
+    beam = orient_beam(new_beam(bs), [1.0, 0.0, 0.0], local_y_dir)
+
+    # Cut the beam at 0.0 and 4.5.
+    a = NamedPlane(:a, plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = NamedPlane(:b, plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+
+    beam = cut(a, cut(b, beam))
+
+    
+    # This is the plane key to render. Take the side of the beam. It should have length 4.5 and height 3.0
+    k = :beam_X_lower
+
+    dpspecs = DrillingPlaneSpecs(0.25, 2)
+    drilling_dir = [0.0, 1.0, 0.0]
+    beam_planes = generate_drilling_planes(beam, dpspecs, drilling_dir)
+
+    println(beam_planes)
+
+    
+
+    # Make a plan for that plane
+    plan = cutting_plan(beam, k)
+
+    # Render the plan
+    render_cutting_plan(plan, default_render_config)
+end
+
+
+export demo # Load the module and call Blueprint.demo() in the REPL.
 
 end # module
+
+
+
+# ONLY FOR DEBUG
+#Blueprint.demo()
