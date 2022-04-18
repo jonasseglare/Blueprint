@@ -548,9 +548,23 @@ function quadratic_beam_specs(size::Real)
     return beam_specs(size, size)
 end
 
+struct LabelSpec
+    text::String
+    short::String
+end
+
+struct Label
+    spec::LabelSpec
+    counter::Integer
+end
+
+function short_text(label::Label)
+    return string(label.spec.short, label.counter)
+end
+
 struct Annotation
     position::Vector{Float64}
-    label::String
+    label::Label
 end
 
 
@@ -718,12 +732,8 @@ struct DrillingPlaneSpecs
     count::Integer 
 end
 
-function generate_drilling_planes(
-    beam::Beam, specs::DrillingPlaneSpecs, drilling_dir::Vector{Float64})::Vector{Plane{Float64}}
-    dim = base_drilling_dim(beam, drilling_dir)
-    (lower_key, upper_key) = plane_keys_per_beam_dim[dim]
-    lower_plane = beam.polyhedron.planes[lower_key]
-    upper_plane = beam.polyhedron.planes[upper_key]
+
+function generate_drilling_planes(lower_plane::Plane{Float64}, upper_plane::Plane{Float64}, specs::DrillingPlaneSpecs)
     dist = evaluate(lower_plane, pos_in_plane(upper_plane))
     lower_offset = specs.marg
     upper_offset = dist - specs.marg
@@ -735,8 +745,26 @@ function generate_drilling_planes(
     return map(i -> translate(lower_plane, lower_offset + i*step), 0:(specs.count - 1))
 end
 
+function generate_drilling_planes(
+    beam::Beam, specs::DrillingPlaneSpecs, drilling_dir::Vector{Float64})::Vector{Plane{Float64}}
+    dim = base_drilling_dim(beam, drilling_dir)
+    (lower_key, upper_key) = plane_keys_per_beam_dim[dim]
+    lower_plane = beam.polyhedron.planes[lower_key]
+    upper_plane = beam.polyhedron.planes[upper_key]
+    return generate_drilling_planes(lower_plane, upper_plane, specs)
+end
+
+
+function generate_unique_index(m::Dict{K, Integer}, k::K) where {K}
+    i = get(m, k, 0)
+    m[k] = i+1
+    return i   
+end
+
+const drill_label_spec = LabelSpec("Drill", "D")
+
 struct Drill
-    label::String
+    label_spec::LabelSpec
     line::ParameterizedLine{Float64}
 end
 
@@ -746,7 +774,7 @@ function generate_drills(drilling_dir::Vector{Float64},
     dst = Vector{Drill}()
     for a in a_planes
         for b in b_planes
-            push!(dst, Drill("Drill", direct_like(intersect(a, b), drilling_dir)))
+            push!(dst, Drill(drill_label_spec, direct_like(intersect(a, b), drilling_dir)))
         end
     end
     return dst
@@ -757,11 +785,13 @@ function drill(beam::Beam, drills::AbstractVector{Drill})
     for (plane_key, plane) in beam.polyhedron.planes
         plane = normalize_plane(plane)
         dst = get(beam.annotations, plane_key, pvec(Vector{Annotation}()))
+        counters = Dict{LabelSpec, Integer}()
         for drill in drills
             if dot(drill.line.dir, plane.normal) > 0
                 intersection = intersect(plane, drill.line)
                 if exists(intersection)
-                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), drill.label))
+                    counter = generate_unique_index(counters, drill.label_spec)
+                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), Label(drill.label_spec, counter)))
                 end
             end
         end
@@ -967,8 +997,6 @@ function cutting_plan(
     world_local = RigidTransform(basis, cog)
     local_world = invert(world_local)
 
-    println(string("DET: ", det(basis)))
-
     loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
     @assert 0 < length(loop)
 
@@ -1000,9 +1028,11 @@ end
 struct RenderConfig
     render_factor::Number
     fontsize::Number
+    offset::Number
+    marker_size::Number
 end
 
-const default_render_config = RenderConfig(100, 12)
+const default_render_config = RenderConfig(100, 12, 5, 5)
 
 function solve_plane_key(ikey::PlaneKeyTuple3, jkey::PlaneKeyTuple3)
     return none
@@ -1017,6 +1047,8 @@ function render_cutting_plan(cp::BeamCuttingPlan, render_config::RenderConfig)
     function local_pt(x)
         return lx_point(render_config.render_factor*x)
     end
+
+    offset = render_config.offset
     
     @lx.pdf begin
         lx.fontsize(render_config.fontsize)
@@ -1025,7 +1057,13 @@ function render_cutting_plan(cp::BeamCuttingPlan, render_config::RenderConfig)
         positions = [local_pt(corner.position) for corner in cp.corners]
         mid = average(positions)
         lx.poly(positions, :stroke, close=true)
-        lx.label.([string(corner.key) for corner in cp.corners], lx.slope.(mid, positions), positions, offset=5)
+        lx.label.([string(corner.key) for corner in cp.corners], lx.slope.(mid, positions), positions, offset=offset)
+
+        apos = [local_pt(annotation.position) for annotation in cp.annotations]
+
+        lx.circle.(apos, render_config.marker_size, :fill)
+        lx.label.([short_text(annotation.label) for annotation in cp.annotations], :SE, apos, offset=offset)
+
         lx.rulers()
     end
 end
@@ -1050,14 +1088,19 @@ function demo()
 
     dpspecs = DrillingPlaneSpecs(0.25, 2)
     drilling_dir = [0.0, 1.0, 0.0]
+    
     beam_planes = generate_drilling_planes(beam, dpspecs, drilling_dir)
+    cut_planes = generate_drilling_planes(a.plane, b.plane, dpspecs)
+    drills = generate_drills(drilling_dir, beam_planes, cut_planes)
 
-    println(beam_planes)
-
+    beam = drill(beam, drills)
     
 
     # Make a plan for that plane
     plan = cutting_plan(beam, k)
+
+    println(string("Corners: ", length(plan.corners)))
+    println(string("Annotations: ", length(plan.annotations)))
 
     # Render the plan
     render_cutting_plan(plan, default_render_config)

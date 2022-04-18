@@ -421,13 +421,56 @@ end
     @test occursin("f 1 3 5", obj)
 
     
-    k = :beam_X_lower
-    @test haskey(beam.polyhedron.planes, k)
+    # k = :beam_X_lower
+    # @test haskey(beam.polyhedron.planes, k)
 
+    # plan = bp.cutting_plan(beam, k)
+
+    # @test bp.plan_width(plan) == 3.0
+    # @test bp.plan_length(plan) == 4.5
+
+    # @test 4 == length(plan.corners)
+
+end
+
+@testset "Cutting plan test" begin
+    bp = Blueprint
+    bs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color)
+
+    # Create a new beam that points in the X direction.
+    beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
+
+    # Cut the beam at 0.0 and 4.5.
+    a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+
+    beam = bp.cut(a, bp.cut(b, beam))
+
+    
+    # This is the plane key to render. Take the side of the beam. It should have length 4.5 and height 3.0
+    k = :beam_X_lower
+
+    dpspecs = bp.DrillingPlaneSpecs(0.25, 2)
+    drilling_dir = [0.0, 1.0, 0.0]
+    
+    beam_planes = bp.generate_drilling_planes(beam, dpspecs, drilling_dir)
+    cut_planes = bp.generate_drilling_planes(a.plane, b.plane, dpspecs)
+    drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes)
+
+    beam = bp.drill(beam, drills)
+    
+
+    # Make a plan for that plane
     plan = bp.cutting_plan(beam, k)
 
-    @test bp.plan_width(plan) == 3.0
-    @test bp.plan_length(plan) == 4.5
-
     @test 4 == length(plan.corners)
+    @test 4 == length(plan.annotations)
+end
+
+@testset "Unique index test" begin
+    bp = Blueprint
+    m = Dict{bp.LabelSpec, Integer}()
+    @test bp.generate_unique_index(m, bp.drill_label_spec) == 0
+    @test bp.generate_unique_index(m, bp.drill_label_spec) == 1
+    @test bp.generate_unique_index(m, bp.drill_label_spec) == 2
 end
