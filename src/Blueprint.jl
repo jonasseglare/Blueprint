@@ -992,20 +992,30 @@ function cutting_plan(
     # The direction of the beam
     specified_beam_dir::Vector{Float64})
 
+
+
+
+    
+
     # The normal of the plane is pointing inward.
     # Flip it so that it points outwards.
-    z = -normalize(beam.polyhedron.planes[k].normal)
+    z = normalize(beam.polyhedron.planes[k].normal)
     
-    x = cross(specified_beam_dir, z)
-    @assert 0 < norm(x)
-    x = normalize(x)
+    y = cross(z, specified_beam_dir)
+    @assert 0 < norm(y)
+    y = normalize(y)
 
-    y = cross(z, x)
+    x = cross(y, z)
 
     cog = plane_cog(beam, k)
     basis = [x y z]
+
+    @assert abs(det(basis) - 1.0) < 1.0e-3
+    
     world_local = RigidTransform(basis, cog)
     local_world = invert(world_local)
+
+    
 
     loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
     @assert 0 < length(loop)
@@ -1101,7 +1111,7 @@ function demo()
     
     beam_planes = generate_drilling_planes(beam, dpspecs, drilling_dir)
     cut_planes = generate_drilling_planes(a.plane, b.plane, dpspecs)
-    drills = generate_drills(drilling_dir, beam_planes, cut_planes)
+    drills = generate_drills(drilling_dir, beam_planes, cut_planes, DrillSpecs(0.003))
 
     beam = drill(beam, drills)
     
@@ -1124,4 +1134,4 @@ end # module
 
 
 # ONLY FOR DEBUG
-#Blueprint.demo()
+Blueprint.demo()
