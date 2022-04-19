@@ -562,9 +562,12 @@ function short_text(label::Label)
     return string(label.spec.short, label.counter)
 end
 
+abstract type AnnotationData end
+
 struct Annotation
     position::Vector{Float64}
     label::Label
+    data::AnnotationData
 end
 
 
@@ -763,24 +766,31 @@ end
 
 const drill_label_spec = LabelSpec("Drill", "D")
 
-struct Drill
+struct DrillSpecs <: AnnotationData
+    radius::Number
+end
+
+struct Drilling
     label_spec::LabelSpec
     line::ParameterizedLine{Float64}
+    specs::DrillSpecs
 end
 
 function generate_drills(drilling_dir::Vector{Float64},
     a_planes::Vector{Plane{Float64}},
-    b_planes::Vector{Plane{Float64}})::Vector{Drill}
-    dst = Vector{Drill}()
+    b_planes::Vector{Plane{Float64}},
+    specs::DrillSpecs)::Vector{Drilling}
+    
+    dst = Vector{Drilling}()
     for a in a_planes
         for b in b_planes
-            push!(dst, Drill(drill_label_spec, direct_like(intersect(a, b), drilling_dir)))
+            push!(dst, Drilling(drill_label_spec, direct_like(intersect(a, b), drilling_dir), specs))
         end
     end
     return dst
 end
 
-function drill(beam::Beam, drills::AbstractVector{Drill})
+function drill(beam::Beam, drills::AbstractVector{Drilling})
     new_annotations = Dict{PlaneKey, PersistentVector{Annotation}}()
     for (plane_key, plane) in beam.polyhedron.planes
         plane = normalize_plane(plane)
@@ -791,7 +801,7 @@ function drill(beam::Beam, drills::AbstractVector{Drill})
                 intersection = intersect(plane, drill.line)
                 if exists(intersection)
                     counter = generate_unique_index(counters, drill.label_spec)
-                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), Label(drill.label_spec, counter)))
+                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), Label(drill.label_spec, counter), drill.specs))
                 end
             end
         end

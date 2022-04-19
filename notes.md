@@ -4,7 +4,7 @@
 
 Task breakdown, cutting plans:
 
-* Add an AnnotationData class with extra information for each annotation, e.g. drill radius
+* ~~Add an AnnotationData class with extra information for each annotation, e.g. drill radius~~
 * Fix the cutting plan so that the beam dir points in the y-direction
 * Given a list of cutting plans and a beam length, optimize their order. Have a flag whether they are flippable or not.
   ALGORITHM: Start with longest cutting plan. Loop over remaining ones and pick the greatest next one that fits inside.

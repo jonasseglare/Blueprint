@@ -371,7 +371,7 @@ end
     A_planes = bp.generate_drilling_planes(A, dp_specs, dir)
     B_planes = bp.generate_drilling_planes(B, dp_specs, dir)
 
-    drills = bp.generate_drills(dir, A_planes, B_planes)
+    drills = bp.generate_drills(dir, A_planes, B_planes, bp.DrillSpecs(0))
 
     @test 4 == length(drills)
     
@@ -455,7 +455,7 @@ end
     
     beam_planes = bp.generate_drilling_planes(beam, dpspecs, drilling_dir)
     cut_planes = bp.generate_drilling_planes(a.plane, b.plane, dpspecs)
-    drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes)
+    drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes, bp.DrillSpecs(0))
 
     beam = bp.drill(beam, drills)
     
