@@ -79,6 +79,10 @@ function translate(plane::Plane{T}, amount::T) where {T}
     return Plane{T}(plane.normal, plane.offset + amount)
 end
 
+function translate_normalized(plane::Plane{T}, amount::T) where {T}
+    return translate(normalize_plane(plane), amount)
+end
+
 function plane_at_pos(normal::Vector{T}, pos::Vector{T}) where {T}
     Plane(normal, dot(pos, normal))
 end
@@ -299,7 +303,7 @@ end
 
 function update_line_bounds(dst::LineBounds, key::PlaneKey, plane::Plane{Float64})::LineBounds
     if !dst.exists
-        return false
+        return dst
     end
 
     intersection = intersect(plane, dst.line)
@@ -1091,14 +1095,14 @@ end
 # http://juliagraphics.github.io/Luxor.jl/stable/
 
 function demo()
-    bs = BeamSpecs(1.0, 3.0, default_beam_color)
+    bs = BeamSpecs(1.0, 2.0, default_beam_color)
 
     # Create a new beam that points in the X direction.
     beam = orient_beam(new_beam(bs), [1.0, 0.0, 0.0], local_y_dir)
 
     # Cut the beam at 0.0 and 4.5.
     a = NamedPlane(:a, plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
-    b = NamedPlane(:b, plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+    b = NamedPlane(:b, plane_at_pos([-1.0, 0.0, 0.3], [4.5, 0.0, 0.0]))
 
     beam = cut(a, cut(b, beam))
 
@@ -1110,7 +1114,7 @@ function demo()
     drilling_dir = [0.0, 1.0, 0.0]
     
     beam_planes = generate_drilling_planes(beam, dpspecs, drilling_dir)
-    cut_planes = generate_drilling_planes(a.plane, b.plane, dpspecs)
+    cut_planes = translate_normalized.([a.plane, b.plane], dpspecs.marg) #generate_drilling_planes(a.plane, b.plane, dpspecs)
     drills = generate_drills(drilling_dir, beam_planes, cut_planes, DrillSpecs(0.003))
 
     beam = drill(beam, drills)
