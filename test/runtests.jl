@@ -454,7 +454,7 @@ end
     drilling_dir = [0.0, 1.0, 0.0]
     
     beam_planes = bp.generate_drilling_planes(beam, dpspecs, drilling_dir)
-    cut_planes = bp.generate_drilling_planes(a.plane, b.plane, dpspecs)
+    cut_planes = bp.generate_drilling_planes(bp.mid_point(beam), a.plane, b.plane, dpspecs)
     drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes, bp.DrillSpecs(0))
 
     beam = bp.drill(beam, drills)
@@ -473,4 +473,11 @@ end
     @test bp.generate_unique_index(m, bp.drill_label_spec) == 0
     @test bp.generate_unique_index(m, bp.drill_label_spec) == 1
     @test bp.generate_unique_index(m, bp.drill_label_spec) == 2
+end
+
+@testset "Project" begin
+    bp = Blueprint
+    plane = bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.5])
+    projected = bp.project(plane, [3.0, 4.5, 100.0])
+    @test isapprox(projected, [3.0, 4.5, 0.5])
 end

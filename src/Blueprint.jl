@@ -740,17 +740,46 @@ struct DrillingPlaneSpecs
 end
 
 
-function generate_drilling_planes(lower_plane::Plane{Float64}, upper_plane::Plane{Float64}, specs::DrillingPlaneSpecs)
-    dist = evaluate(lower_plane, pos_in_plane(upper_plane))
-    lower_offset = specs.marg
-    upper_offset = dist - specs.marg
-    dst = Vector{Plane{Float64}}()
-    if lower_offset >= upper_offset
-        return dst
+function plane_interpolator(cog::Vector{Float64},
+    lower_plane::Plane{Float64},
+    upper_plane::Plane{Float64})
+
+    lower_pos = project(lower_plane, cog)
+    upper_pos = project(upper_plane, cog)
+
+    lower_normal = lower_plane.normal
+    upper_normal = sign(dot(upper_plane.normal, lower_plane.normal))*-1*upper_plane.normal
+
+    function f(lambda)::Plane{Float64}
+        lw = 1.0 - lambda
+        uw = lambda
+        pos = lw*lower_pos + uw*upper_pos
+        normal = normalize(lw*lower_normal + uw*upper_normal)
+        return plane_at_pos(normal, pos)
     end
-    step = (upper_offset - lower_offset)/(specs.count - 1)
-    return map(i -> translate(lower_plane, lower_offset + i*step), 0:(specs.count - 1))
+    return f
 end
+
+function generate_drilling_planes(cog0::Vector{Float64},
+    lower_plane0::Plane{Float64},
+    upper_plane0::Plane{Float64},
+    specs::DrillingPlaneSpecs)::Vector{Plane{Float64}}
+
+    cog = 0.5*(project(lower_plane0, cog0) + project(upper_plane0, cog0))
+    lower_plane = translate_normalized(lower_plane0, specs.marg)
+    upper_plane = translate_normalized(upper_plane0, specs.marg)
+    
+    @assert dot(lower_plane.normal, upper_plane.normal) < 0
+    if evaluate(lower_plane, cog) <= 0
+        return Vector{Plane{Float64}}()
+    end
+    last = specs.count - 1
+    step = 1.0/last
+    f = plane_interpolator(cog, lower_plane, upper_plane)
+    return map(i -> f(step*i), 0:last)
+end
+    
+
 
 function generate_drilling_planes(
     beam::Beam, specs::DrillingPlaneSpecs, drilling_dir::Vector{Float64})::Vector{Plane{Float64}}
@@ -758,7 +787,7 @@ function generate_drilling_planes(
     (lower_key, upper_key) = plane_keys_per_beam_dim[dim]
     lower_plane = beam.polyhedron.planes[lower_key]
     upper_plane = beam.polyhedron.planes[upper_key]
-    return generate_drilling_planes(lower_plane, upper_plane, specs)
+    return generate_drilling_planes(mid_point(beam), lower_plane, upper_plane, specs)
 end
 
 
@@ -1114,7 +1143,7 @@ function demo()
     drilling_dir = [0.0, 1.0, 0.0]
     
     beam_planes = generate_drilling_planes(beam, dpspecs, drilling_dir)
-    cut_planes = translate_normalized.([a.plane, b.plane], dpspecs.marg) #generate_drilling_planes(a.plane, b.plane, dpspecs)
+    cut_planes = translate_normalized.([a.plane, b.plane], dpspecs.marg)
     drills = generate_drills(drilling_dir, beam_planes, cut_planes, DrillSpecs(0.003))
 
     beam = drill(beam, drills)
