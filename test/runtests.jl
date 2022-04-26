@@ -481,3 +481,47 @@ end
     projected = bp.project(plane, [3.0, 4.5, 100.0])
     @test isapprox(projected, [3.0, 4.5, 0.5])
 end
+
+function sample_bcp(len::Float64)
+    bp = Blueprint
+    k = :a
+    corners = [bp.CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
+               bp.CornerPosition((:a, :c, :d), [0.0, 0.0]),
+               bp.CornerPosition((:a, :d, :e), [1.0, 1.0]),
+               bp.CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
+    annotations = Vector{bp.Annotation}()
+    return bp.beam_cutting_plan(k, corners, annotations)
+end
+
+@testset "loop bounding planes test" begin
+    bp = Blueprint
+    base_loop = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+
+    for loop in [base_loop, reverse(base_loop)]
+        planes = bp.loop_bounding_planes(loop)
+        sample_points = [([-0.1, -0.1], false), ([0.1, 0.1], true)]
+        function contained(x)
+            for p in planes
+                if bp.evaluate(p, x) < 0
+                    return false
+                end
+            end
+            return true
+        end
+
+        for (pos, expected) in sample_points
+            @test expected == contained(pos)
+        end
+    end
+end
+
+@testset "Cut plan optimization" begin
+    bp = Blueprint
+    plans = Vector{bp.BeamCuttingPlan}()
+    for i in 1:10
+        x = sample_bcp(convert(Float64, i))
+        push!(plans, x)
+    end
+
+    
+end

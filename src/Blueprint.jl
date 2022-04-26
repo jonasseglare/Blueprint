@@ -983,11 +983,13 @@ struct CornerPosition
     position::Vector{Float64}
 end
 
+abstract type AbstractCuttingPlan end
+
 # All coordinates are in a local coordinate system.
-# The y axis points in the direction of the beam.
-# The x axis points to the side.
-# The z (which is not used) is in the normal of the plane.
-struct BeamCuttingPlan
+# The x axis points in the direction of the beam (right)
+# The y axis points to the side (down)
+# The z (which is not used) points away, in toward the inside of the polyhedron
+struct BeamCuttingPlan <: AbstractCuttingPlan
     # The plane that is used for the plan
     plane_key::PlaneKey
 
@@ -1123,6 +1125,28 @@ end
 # Rendering plans
 # http://juliagraphics.github.io/Luxor.jl/stable/
 
+function loop_bounding_planes(positions::Vector{Vector{Float64}})
+    c = average(positions)
+    n = length(positions)
+    result = Vector{Plane{Float64}}()
+    for i in 1:n
+        src = positions[i]
+        dst = positions[mod1(i + 1, n)]
+        diff = dst - src
+        normal = [-diff[2], diff[1]]
+        plane = plane_at_pos(normal, src)
+        if evaluate(plane, c) < 0
+            plane = flip(plane)
+        end
+        push!(result, plane)
+    end
+    return result
+end
+
+function loop_bounding_planes(loop_corners::Vector{CornerPosition})
+    return loop_bounding_planes(map(cp -> cp.position, loop_corners))
+end
+
 function demo()
     bs = BeamSpecs(1.0, 2.0, default_beam_color)
 
@@ -1160,7 +1184,7 @@ function demo()
 end
 
 
-export demo # Load the module and call Blueprint.demo() in the REPL.
+#export demo # Load the module and call Blueprint.demo() in the REPL.
 
 end # module
 
