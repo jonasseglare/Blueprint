@@ -15,6 +15,7 @@ abstract type PhysicalObject end
 const PlaneKey = Symbol
 const PlaneKeyTuple2 = Tuple{PlaneKey, PlaneKey}
 const PlaneKeyTuple3 = Tuple{PlaneKey, PlaneKey, PlaneKey}
+const Vector64 = Vector{Float64}
 
 struct DefinedInterval{T}
     lower::T
@@ -1143,8 +1144,70 @@ function loop_bounding_planes(positions::Vector{Vector{Float64}})
     return result
 end
 
+
 function loop_bounding_planes(loop_corners::Vector{CornerPosition})
     return loop_bounding_planes(map(cp -> cp.position, loop_corners))
+end
+
+function solve_push_segments(left, pos, dir)
+    (x, y) = left
+    A = [x-y -dir]
+    B = pos-y
+    try
+        (lambda, alpha) = A\B
+        if 0 <= lambda && lambda <= 1.0
+            return alpha
+        else
+            return nothing
+        end
+    catch e
+        return nothing
+    end
+end
+
+function push_loop_against_loop(
+    corners_a::Vector{Vector64},
+    corners_b::Vector{Vector64},
+    direction::Vector64)
+
+    planes_a = loop_bounding_planes(corners_a)
+    planes_b = loop_bounding_planes(corners_b)
+
+    an = length(corners_a)
+    bn = length(corners_b)
+
+    
+    best::Union{Float64, Nothing} = nothing
+
+    function get_segment(corners, index)
+        return [corners[index], corners[mod1(index + 1, length(corners))]]
+    end
+    
+    for i in 1:an
+        adot = dot(direction, planes_a[i].normal)
+        for j in 1:bn
+            bdot = dot(direction, planes_b[j].normal)
+
+            if adot*bdot <= 0
+
+                src_dst = [get_segment(corners_a, i), get_segment(corners_b, j)]
+                
+                for k in 0:1
+                    left = src_dst[1 + k]
+                    dir = (1 - 2*k)*direction
+                    (r0, r1) = src_dst[1 + (1 - k)]
+
+                    x = dot(dir, r0) > dot(dir, r1) ? r0 : r1
+                    
+                    sol = solve_push_segments(left, x, dir)
+                    if sol != nothing && (best == nothing || sol < best)
+                        best = sol
+                    end
+                end
+            end
+        end
+    end
+    return best
 end
 
 function demo()
@@ -1191,4 +1254,4 @@ end # module
 
 
 # ONLY FOR DEBUG
-Blueprint.demo()
+#Blueprint.demo()

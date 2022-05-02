@@ -482,17 +482,6 @@ end
     @test isapprox(projected, [3.0, 4.5, 0.5])
 end
 
-function sample_bcp(len::Float64)
-    bp = Blueprint
-    k = :a
-    corners = [bp.CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
-               bp.CornerPosition((:a, :c, :d), [0.0, 0.0]),
-               bp.CornerPosition((:a, :d, :e), [1.0, 1.0]),
-               bp.CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
-    annotations = Vector{bp.Annotation}()
-    return bp.beam_cutting_plan(k, corners, annotations)
-end
-
 @testset "loop bounding planes test" begin
     bp = Blueprint
     base_loop = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -515,6 +504,28 @@ end
     end
 end
 
+@testset "Push against test" begin
+    bp = Blueprint
+    a = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+    b = [[2.25, -1], [3.4, -1], [3.5, 10], [2.25, 10]]
+    c = [[2.25, 5], [3.4, 5], [3.5, 10], [2.25, 10]]
+    @test 1.25 == bp.push_loop_against_loop(a, b, [-1.0, 0.0])
+    @test 1.25 == bp.push_loop_against_loop(b, a, [1.0, 0.0])
+    @test 2.5 == bp.push_loop_against_loop(b, a, [0.5, 0.0])
+    @test nothing == bp.push_loop_against_loop(a, c, [-1.0, 0.0])
+end
+
+function sample_bcp(len::Float64)
+    bp = Blueprint
+    k = :a
+    corners = [bp.CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
+               bp.CornerPosition((:a, :c, :d), [0.0, 0.0]),
+               bp.CornerPosition((:a, :d, :e), [1.0, 1.0]),
+               bp.CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
+    annotations = Vector{bp.Annotation}()
+    return bp.beam_cutting_plan(k, corners, annotations)
+end
+
 @testset "Cut plan optimization" begin
     bp = Blueprint
     plans = Vector{bp.BeamCuttingPlan}()
@@ -522,6 +533,4 @@ end
         x = sample_bcp(convert(Float64, i))
         push!(plans, x)
     end
-
-    
 end
