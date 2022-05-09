@@ -534,14 +534,14 @@ end
     bp = Blueprint
     plans = [sample_bcp(1.0), sample_bcp(2.0), sample_bcp(3.0)]
 
-    out = bp.pack(plans, 8.3, 0.25)
+    out = bp.pack(plans, 9, 0.25)
 
     @test 2 == length(out)
     @test 2 == length(out[1].plans)
     @test 1 == length(out[2].plans)
     @test 5 == bp.plan_length(out[1].plans[1])
     @test 4 == bp.plan_length(out[1].plans[2])
-    @test 5.0 == bp.right(out[1].plans[1])
-    @test 8.25 == bp.right(out[1].plans[2])
+    @test 5.25 == bp.right(out[1].plans[1])
+    @test 8.5 == bp.right(out[1].plans[2])
 
 end

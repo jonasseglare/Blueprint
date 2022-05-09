@@ -1277,12 +1277,11 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
             for gplan in genplans
                 loop = cutting_plan_loop(gplan)
                 amount = push_loop_against_loop(last_loop, loop, dir)
-                mrg = if 0 < length(current_beam) margin else 0 end
-                adjusted_plan = transform(rigid_transform_from_translation((amount - mrg)*dir), gplan)
+                adjusted_plan = transform(rigid_transform_from_translation((amount - margin)*dir), gplan)
                 new_length = plan_length(adjusted_plan)
                 new_right = right(adjusted_plan)
                 new_measures = (new_length, -new_right)
-                if new_right <= beam_length && best_measures < new_measures
+                if new_right <= beam_length - margin && best_measures < new_measures
                     best_key = k
                     best_plan = adjusted_plan
                     best_measures = new_measures
