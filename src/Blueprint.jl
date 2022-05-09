@@ -1343,7 +1343,10 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
 end
 
 function bbox(beam_layout::BeamLayout)
-    return compute_bbox([plan.bbox for plan in beam_layout.plans])
+    dst = compute_bbox([plan.bbox for plan in beam_layout.plans])
+    @assert 0 <= dst.intervals[1].lower
+    @assert dst.intervals[1].upper <= beam_layout.beam_length
+    return BBox{Float64}([DefinedInterval(0, beam_layout.beam_length), dst.intervals[2]])
 end
 
 
