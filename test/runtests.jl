@@ -530,4 +530,5 @@ end
     @test 4 == bp.plan_length(out[1].plans[2])
     @test 5.25 == bp.right(out[1].plans[1])
     @test 8.5 == bp.right(out[1].plans[2])
+    @test 9.0 == bp.width(bp.bbox(out[1]).intervals[1])
 end
