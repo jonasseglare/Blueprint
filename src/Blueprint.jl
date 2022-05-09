@@ -199,7 +199,7 @@ function rigid_transform_from_xy_rotation(angle::Float64, dims::Integer)
     return dst
 end
 
-function rigid_transform_from_rotation(R::Matrix{T}) where {T}
+function rigid_transform_from_R(R::Matrix{T}) where {T}
     (rows, cols) = size(R)
     @assert rows == cols
     return RigidTransform{T}(R, zeros(T, rows))
@@ -617,7 +617,7 @@ function orient_beam_transform(world_dir::Vector{Float64}, up_in_beam_coordinate
 
     A = [local_ortho_up local_complement local_beam_dir]
     B = [world_ortho_up world_complement dir]
-    T = rigid_transform_from_rotation(B*A')
+    T = rigid_transform_from_R(B*A')
     @assert 0 < det(T.rotation)
     return T
 end
@@ -987,9 +987,14 @@ end
 abstract type AbstractCuttingPlan end
 
 # All coordinates are in a local coordinate system.
-# The x axis points in the direction of the beam (right)
-# The y axis points to the side (down)
-# The z (which is not used) points away, in toward the inside of the polyhedron
+#
+# When looking at the beam side from outside the beam:
+#
+# * The x axis points in the direction of the beam (right)
+# * The y axis points to the side (down)
+# * The z (which is not used) points away, in toward the inside of the polyhedron
+#
+#
 struct BeamCuttingPlan <: AbstractCuttingPlan
     # The plane that is used for the plan
     plane_key::PlaneKey
@@ -1016,6 +1021,13 @@ end
 # Constructs a cutting plan for a beam.
 function beam_cutting_plan(plane_key::PlaneKey, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
     return BeamCuttingPlan(plane_key, corners, annotations, compute_bbox([corner.position for corner in corners]))
+end
+
+function transform(rt::RigidTransform{Float64}, plan::BeamCuttingPlan)
+    return beam_cutting_plan(
+    plan.plane_key,
+    [@set corner.position = transform_position(rt, corner.position) for corner in plan.corners],
+    [@set annotation.position = transform_position(rt, annotation.position) for annotation in plan.annotations])
 end
 
 function cutting_plan(
@@ -1067,14 +1079,6 @@ end
 
 function cutting_plan(beam::Beam, k::PlaneKey)
     return cutting_plan(beam, k, beam_dir(beam))
-end
-
-function plan_width(cp::BeamCuttingPlan)
-    return width(cp.bbox.intervals[1])
-end
-
-function plan_length(cp::BeamCuttingPlan)
-    return width(cp.bbox.intervals[2])
 end
 
 function lx_point(v)
@@ -1208,6 +1212,102 @@ function push_loop_against_loop(
         end
     end
     return best
+end
+
+function cutting_plan_loop(plan::BeamCuttingPlan)
+    return [corner.position for corner in plan.corners]
+end
+
+function align_plan(plan::BeamCuttingPlan)
+    offset = [plan.bbox.intervals[1].lower, plan.bbox.intervals[2].lower]
+    return transform(rigid_transform_from_translation(-offset), plan)
+end
+
+function plan_length(plan::BeamCuttingPlan)
+    return width(plan.bbox.intervals[1])
+end
+
+function longest_plan(plans::Vector{BeamCuttingPlan})
+    return reduce((a, b) -> plan_length(a) > plan_length(b) ? a : b, plans)
+end
+
+function generate_transformed_plans(plan::BeamCuttingPlan)
+    rotated = transform(rigid_transform_from_R([-1.0 0.0; 0.0 -1.0]), plan)
+    M = rigid_transform_from_R([1.0 0.0; 0.0 -1.0])
+    return [align_plan(plan), align_plan(rotated),
+    align_plan(transform(M, plan)), align_plan(transform(M, rotated))]
+end
+
+function right(plan::BeamCuttingPlan)
+    return plan.bbox.intervals[1].upper
+end
+
+struct BeamLayout
+    beam_length::Number
+    plans::Vector{BeamCuttingPlan}
+end
+
+function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Number)
+    n = length(plans)
+    plan_map = Dict{Int32, BeamCuttingPlan}()
+    for plan in plans
+        plan_map[length(plan_map)] = plan
+    end
+
+    result = Vector{BeamLayout}()    
+    stop_loop = [[0.0, 0.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, 0.0]]
+    dir = [-1.0, 0.0]
+    
+    current_beam = Vector{BeamCuttingPlan}()
+    last_loop = stop_loop
+
+
+    function push_layout()
+        push!(result, BeamLayout(beam_length, current_beam))
+        current_beam = Vector{BeamCuttingPlan}()
+        last_loop = stop_loop
+    end
+
+    while 0 < length(plan_map)
+        best_key = nothing
+        best_plan = nothing
+        best_measures = (0, -beam_length)
+        for (k, plan) in plan_map
+            genplans = generate_transformed_plans(plan)
+            for gplan in genplans
+                loop = cutting_plan_loop(gplan)
+                amount = push_loop_against_loop(last_loop, loop, dir)
+                mrg = if 0 < length(current_beam) margin else 0 end
+                adjusted_plan = transform(rigid_transform_from_translation((amount - mrg)*dir), gplan)
+                new_length = plan_length(adjusted_plan)
+                new_right = right(adjusted_plan)
+                new_measures = (new_length, -new_right)
+                if new_right <= beam_length && best_measures < new_measures
+                    best_key = k
+                    best_plan = adjusted_plan
+                    best_measures = new_measures
+                end
+            end
+        end
+
+        if best_plan == nothing
+            if length(current_beam) == 0
+                error("Cutting plan does not fit in beam")
+            else
+                push_layout()
+            end
+        else
+            push!(current_beam, best_plan)
+            last_loop = cutting_plan_loop(best_plan)
+            delete!(plan_map, best_key)
+        end
+    end
+
+    if 0 < length(current_beam)
+        push_layout()
+    end
+    
+    return result
 end
 
 function demo()

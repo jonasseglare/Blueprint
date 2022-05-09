@@ -515,6 +515,9 @@ end
     @test nothing == bp.push_loop_against_loop(a, c, [-1.0, 0.0])
 end
 
+## Optimize it
+
+
 function sample_bcp(len::Float64)
     bp = Blueprint
     k = :a
@@ -526,11 +529,19 @@ function sample_bcp(len::Float64)
     return bp.beam_cutting_plan(k, corners, annotations)
 end
 
+
 @testset "Cut plan optimization" begin
     bp = Blueprint
-    plans = Vector{bp.BeamCuttingPlan}()
-    for i in 1:10
-        x = sample_bcp(convert(Float64, i))
-        push!(plans, x)
-    end
+    plans = [sample_bcp(1.0), sample_bcp(2.0), sample_bcp(3.0)]
+
+    out = bp.pack(plans, 8.3, 0.25)
+
+    @test 2 == length(out)
+    @test 2 == length(out[1].plans)
+    @test 1 == length(out[2].plans)
+    @test 5 == bp.plan_length(out[1].plans[1])
+    @test 4 == bp.plan_length(out[1].plans[2])
+    @test 5.0 == bp.right(out[1].plans[1])
+    @test 8.25 == bp.right(out[1].plans[2])
+
 end
