@@ -10,7 +10,7 @@ Task breakdown, cutting plans:
   ALGORITHM: Start with longest cutting plan. Loop over remaining ones and pick the greatest next one that fits inside.
   Try flipping it if that makes it overall shorter.~~
 * ~~Given a list of simple cutting plans, make a function pack that translates them so that they don't intersect.~~
-* Add flag whether a cutting plan can be mirrored or not.
+* ~~Add flag whether a cutting plan can be mirrored or not.~~
 * Render a *sequence* of cutting plans instead of just one. Make sure that the output image has adequate size.
 * Return a table with the meaning of different annotations in the figure.
 * Adjust the scale at which a cutting plan is rendered based on the *minimum* bbox side.

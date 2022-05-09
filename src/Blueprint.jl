@@ -540,13 +540,18 @@ struct BeamSpecs
     Ysize::Real
 
     color::RgbColor
+
+    # Whether a side looks the same as the facing side
+    flip_symmetric::Bool
+
+    
     # The Z direction is the direction of the beam
 end
 
 default_beam_color = RgbColor(0.0, 0.0, 1.0)
 
 function beam_specs(Xsize::Real, Ysize::Real)
-    return BeamSpecs(Xsize, Ysize, default_beam_color)
+    return BeamSpecs(Xsize, Ysize, default_beam_color, true)
 end
 
 function quadratic_beam_specs(size::Real)
@@ -999,12 +1004,15 @@ struct BeamCuttingPlan <: AbstractCuttingPlan
     # The plane that is used for the plan
     plane_key::PlaneKey
 
+    flip_symmetric::Bool
+    
     # The sequence of corners
     corners::Vector{CornerPosition}
 
     # Any annotationss
     annotations::Vector{Annotation}
 
+    
     # The bounding box
     bbox::BBox{Float64}
 end
@@ -1019,13 +1027,14 @@ function plane_cog(beam::Beam, k::PlaneKey)
 end
 
 # Constructs a cutting plan for a beam.
-function beam_cutting_plan(plane_key::PlaneKey, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
-    return BeamCuttingPlan(plane_key, corners, annotations, compute_bbox([corner.position for corner in corners]))
+function beam_cutting_plan(plane_key::PlaneKey, flipsym::Bool, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
+    return BeamCuttingPlan(plane_key, flipsym, corners, annotations, compute_bbox([corner.position for corner in corners]))
 end
 
 function transform(rt::RigidTransform{Float64}, plan::BeamCuttingPlan)
     return beam_cutting_plan(
     plan.plane_key,
+    plan.flip_symmetric,
     [@set corner.position = transform_position(rt, corner.position) for corner in plan.corners],
     [@set annotation.position = transform_position(rt, annotation.position) for annotation in plan.annotations])
 end
@@ -1074,7 +1083,7 @@ function cutting_plan(
     
     corners = [CornerPosition(corner, localize(beam.polyhedron.corners[corner])) for corner in loop]
     annotations = [@set annotation.position = localize(annotation.position) for annotation in get(beam.annotations, k, PersistentVector{Annotation}())]
-    return beam_cutting_plan(k, corners, annotations)
+    return beam_cutting_plan(k, beam.specs.flip_symmetric, corners, annotations)
 end
 
 function cutting_plan(beam::Beam, k::PlaneKey)
@@ -1234,8 +1243,13 @@ end
 function generate_transformed_plans(plan::BeamCuttingPlan)
     rotated = transform(rigid_transform_from_R([-1.0 0.0; 0.0 -1.0]), plan)
     M = rigid_transform_from_R([1.0 0.0; 0.0 -1.0])
-    return [align_plan(plan), align_plan(rotated),
-    align_plan(transform(M, plan)), align_plan(transform(M, rotated))]
+    dst = [align_plan(plan), align_plan(rotated)]
+    if plan.flip_symmetric
+        push!(dst, align_plan(transform(M, plan)))
+        push!(dst, align_plan(transform(M, rotated)))
+    end
+    return dst
+    
 end
 
 function right(plan::BeamCuttingPlan)
@@ -1310,7 +1324,7 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
 end
 
 function demo()
-    bs = BeamSpecs(1.0, 2.0, default_beam_color)
+    bs = BeamSpecs(1.0, 2.0, default_beam_color, true)
 
     # Create a new beam that points in the X direction.
     beam = orient_beam(new_beam(bs), [1.0, 0.0, 0.0], local_y_dir)
