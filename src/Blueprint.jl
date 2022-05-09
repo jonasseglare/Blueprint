@@ -65,6 +65,14 @@ function compute_bbox(points::AbstractVector{Vector{T}}) where {T}
     return BBox{T}(dst)
 end
 
+function bounding_points(bbox::BBox{T}) where {T}
+    return [[ivl.lower for ivl in bbox.intervals], [ivl.upper for ivl in bbox.intervals]]
+end
+
+function compute_bbox(boxes::Vector{BBox{T}}) where {T}
+    return compute_bbox([pt for bbox in boxes for pt in bounding_points(bbox)])
+end
+
 
 ### Represents the plane normal*X = offset
 struct Plane{T}
@@ -1127,6 +1135,7 @@ end
 
 function render(cp::BeamCuttingPlan, render_config::RenderConfig)
     function sub(local_pt)
+        @info "The matrix is" lx.getmatrix()
         offset = render_config.offset
         
         lx.fontsize(render_config.fontsize)
@@ -1331,6 +1340,10 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
     end
     
     return result
+end
+
+function bbox(beam_layout::BeamLayout)
+    return compute_bbox([plan.bbox for plan in beam_layout.plans])
 end
 
 
