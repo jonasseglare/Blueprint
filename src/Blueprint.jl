@@ -66,7 +66,7 @@ function compute_bbox(points::AbstractVector{Vector{T}}) where {T}
 end
 
 
-## Represents the plane normal*X = offset
+### Represents the plane normal*X = offset
 struct Plane{T}
     normal::Vector{T}
     offset::T
@@ -132,7 +132,7 @@ function facing_plane(plane::Plane{T}, distance) where {T}
 end
 
 
-## Line
+### Line
 
 struct ParameterizedLine{T}
     dir::Vector{T}
@@ -505,7 +505,7 @@ end
 # Y-height (the longer) # Usually, X < Y
 # Z-length
 
-## Example:
+### Example:
 #
 #   Y
 #   ^
@@ -1099,9 +1099,13 @@ struct RenderConfig
     fontsize::Number
     offset::Number
     marker_size::Number
+
+    width::Number
+    height::Number
+    filename::String
 end
 
-const default_render_config = RenderConfig(100, 12, 5, 5)
+const default_render_config = RenderConfig(100, 12, 5, 5, 600, 600, "/tmp/blueprint_sketch.pdf")
 
 function solve_plane_key(ikey::PlaneKeyTuple3, jkey::PlaneKeyTuple3)
     return none
@@ -1112,14 +1116,19 @@ function average(positions)
 end
 
 
-function render_cutting_plan(cp::BeamCuttingPlan, render_config::RenderConfig)
-    function local_pt(x)
-        return lx_point(render_config.render_factor*x)
-    end
-
-    offset = render_config.offset
-    
+function render_pdf(body_fn, render_config::RenderConfig)
     @lx.pdf begin
+        function local_pt(x)
+            return lx_point(render_config.render_factor*x)
+        end
+        body_fn(local_pt)
+    end render_config.width render_config.height render_config.filename
+end
+
+function render(cp::BeamCuttingPlan, render_config::RenderConfig)
+    function sub(local_pt)
+        offset = render_config.offset
+        
         lx.fontsize(render_config.fontsize)
         n = length(cp.corners)
         lx.setdash("solid")
@@ -1134,7 +1143,8 @@ function render_cutting_plan(cp::BeamCuttingPlan, render_config::RenderConfig)
         lx.label.([short_text(annotation.label) for annotation in cp.annotations], :SE, apos, offset=offset)
 
         lx.rulers()
-    end
+     end
+    render_pdf(sub, render_config)
 end
 # Rendering plans
 # http://juliagraphics.github.io/Luxor.jl/stable/
@@ -1323,7 +1333,22 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
     return result
 end
 
-function demo()
+
+######################## Samples code
+
+
+function sample_bcp(len::Float64)
+    bp = Blueprint
+    k = :a
+    corners = [bp.CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
+               bp.CornerPosition((:a, :c, :d), [0.0, 0.0]),
+               bp.CornerPosition((:a, :d, :e), [1.0, 1.0]),
+               bp.CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
+    annotations = Vector{bp.Annotation}()
+    return bp.beam_cutting_plan(k, true, corners, annotations)
+end
+
+function demo0()
     bs = BeamSpecs(1.0, 2.0, default_beam_color, true)
 
     # Create a new beam that points in the X direction.
@@ -1356,7 +1381,14 @@ function demo()
     println(string("Annotations: ", length(plan.annotations)))
 
     # Render the plan
-    render_cutting_plan(plan, default_render_config)
+    render(plan, default_render_config)
+end
+
+function demo1()
+    plans = [sample_bcp(1.0), sample_bcp(2.0), sample_bcp(3.0)]
+    out = bp.pack(plans, 9, 0.25)
+
+    render(out[1], default_render_config)
 end
 
 

@@ -517,22 +517,9 @@ end
 
 ## Optimize it
 
-
-function sample_bcp(len::Float64)
-    bp = Blueprint
-    k = :a
-    corners = [bp.CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
-               bp.CornerPosition((:a, :c, :d), [0.0, 0.0]),
-               bp.CornerPosition((:a, :d, :e), [1.0, 1.0]),
-               bp.CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
-    annotations = Vector{bp.Annotation}()
-    return bp.beam_cutting_plan(k, true, corners, annotations)
-end
-
-
 @testset "Cut plan optimization" begin
     bp = Blueprint
-    plans = [sample_bcp(1.0), sample_bcp(2.0), sample_bcp(3.0)]
+    plans = [bp.sample_bcp(1.0), bp.sample_bcp(2.0), bp.sample_bcp(3.0)]
 
     out = bp.pack(plans, 9, 0.25)
 
