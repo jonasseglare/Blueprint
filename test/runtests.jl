@@ -515,6 +515,20 @@ end
     @test nothing == bp.push_loop_against_loop(a, c, [-1.0, 0.0])
 end
 
+## Simplification
+
+@testset "Simplify edge multiples" begin
+    bp = Blueprint
+    src = [bp.IntervalEdge(0.3, 1),
+           bp.IntervalEdge(0.6, -1),
+           bp.IntervalEdge(0.6, 1),
+           bp.IntervalEdge(0.75, -1)]
+    dst = bp.simplify_edge_multiples(src)
+    @test 2 == length(dst)
+    @test dst[1].position == 0.3
+    @test dst[2].position == 0.75
+end
+
 ## Optimize it
 
 @testset "Cut plan optimization" begin
@@ -531,4 +545,25 @@ end
     @test 5.25 == bp.right(out[1].plans[1])
     @test 8.5 == bp.right(out[1].plans[2])
     @test 9.0 == bp.width(bp.bbox(out[1]).intervals[1])
+
+    layout = out[1]
+    edges = bp.generate_interval_edges(layout)
+
+    intervals = bp.generate_incompressible_intervals(bp.simplify_edge_multiples(edges))
+    @test 3 == length(intervals)
+
+    xy = bp.generate_compression_function_points(intervals, 1.0)
+    @test 6 == length(xy)
+    @test (8.5, 5.5) == last(xy)
+
+    @test 0 == length(bp.generate_incompressible_intervals(Vector{bp.IntervalEdge}()))
+    @test 0 == length(bp.generate_compression_function_points(
+        Vector{bp.DefinedInterval{Float64}}(), 1.0))
+
+    @test 0.2 == bp.evaluate_piecewise_linear(xy, 0.2)
+    @test 6.0 == bp.evaluate_piecewise_linear(xy, 9.0)
+    @test 1.75 == bp.evaluate_piecewise_linear(xy, 2.75)
+
+    f = bp.compression_function(layout, 1.0)
+    @test 1.75 == f(2.75)
 end

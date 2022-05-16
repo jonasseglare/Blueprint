@@ -1349,6 +1349,146 @@ function bbox(beam_layout::BeamLayout)
     return BBox{Float64}([DefinedInterval{Float64}(0, beam_layout.beam_length), dst.intervals[2]])
 end
 
+struct IntervalEdge
+    position::Float64
+    step::Integer
+end
+
+function generate_interval_edges(plan::BeamCuttingPlan, tol=1.0e-6)
+    positions = [c.position for c in plan.corners]
+    n = length(positions)
+    result = Vector{IntervalEdge}()
+    for i in 1:n
+        src = positions[i]
+        dst = positions[mod1(i+1, n)]
+        diff = dst - src
+        dist = norm(diff)
+        flat = dist > tol && abs(diff[2])/dist < tol
+        if !flat
+            (rising, falling) = sort([src[1], dst[1]])
+            push!(result, IntervalEdge(rising, 1))
+            push!(result, IntervalEdge(falling, -1))
+        end
+    end
+    return result
+end
+
+function generate_interval_edges(layout::BeamLayout, tol=1.0e-6)
+    edges = [edge for plan in layout.plans for edge in generate_interval_edges(plan, tol)]
+    return sort(edges, by=x->x.position)
+end
+
+function simplify_edge_multiples(edges::Vector{IntervalEdge})
+    dst0 = Vector{IntervalEdge}()
+    if length(edges) == 0
+        return dst0
+    end
+    
+    last_pos = edges[1].position
+    last_step = 0
+    for edge in edges
+        if edge.position != last_pos
+            if last_step != 0
+                push!(dst0, IntervalEdge(last_pos, last_step))
+            end
+            last_pos = edge.position
+            last_step = edge.step
+        else
+            last_step += edge.step
+        end
+    end
+    if last_step != 0
+        push!(dst0, IntervalEdge(last_pos, last_step))
+    end
+    return dst0
+end
+
+function generate_incompressible_intervals(edges_no_multiples::Vector{IntervalEdge})
+    current_level = 0
+    start_at = 0
+    dst = Vector{DefinedInterval{Float64}}()
+    for edge in edges_no_multiples
+        next_level = current_level + edge.step
+        if current_level == 0 && next_level == 1
+            start_at = edge.position
+        elseif current_level == 1 && next_level == 0
+            push!(dst, DefinedInterval{Float64}(start_at, edge.position))
+        end
+        current_level = next_level
+    end
+    return dst
+end
+
+function generate_compression_function_points(
+    intervals::Vector{DefinedInterval{Float64}},
+    max_step::Float64)
+    
+    dst = Vector{Tuple{Float64, Float64}}()
+    n = length(intervals)
+    if n == 0
+        return dst
+    end
+    push!(dst, (intervals[1].lower, intervals[1].lower))
+    push!(dst, (intervals[1].upper, intervals[1].upper))
+
+    for i in 2:n
+        left = intervals[i-1]
+        right = intervals[i]
+        (x, y0) = last(dst)
+        step = right.lower - left.upper
+        y1 = y0 + min(max_step, step)
+        push!(dst, (right.lower, y1))
+        push!(dst, (right.upper, y1 + (right.upper - right.lower)))
+    end
+    return dst
+end
+
+function evaluate_piecewise_linear_inner(xy_pairs::Vector{Tuple{Float64, Float64}},
+                                         x::Float64, l::Int64, r::Int64)
+    n = r - l
+    @assert 1 <= n
+    if n == 1
+        (x0, y0) = xy_pairs[l]
+        (x1, y1) = xy_pairs[r]
+        @assert x0 < x1
+        lambda = (x - x0)/(x1 - x0)
+        return (1.0 - lambda)*y0 + lambda*y1
+    else
+        mid = l + div(n, 2)
+        if x < xy_pairs[mid][1]
+            return evaluate_piecewise_linear_inner(xy_pairs, x, l, mid)
+        else
+            return evaluate_piecewise_linear_inner(xy_pairs, x, mid, r)
+        end
+    end        
+end
+    
+
+function evaluate_piecewise_linear(xy_pairs::Vector{Tuple{Float64, Float64}}, x)
+    if length(xy_pairs) == 0
+        return x
+    end
+
+    if x <= xy_pairs[1][1]
+        return x
+    end
+
+    lxy = last(xy_pairs)
+    if lxy[1] <= x
+        return lxy[2] + (x - lxy[1])
+    end
+
+    return evaluate_piecewise_linear_inner(xy_pairs, x, 1, length(xy_pairs))
+end
+
+function compression_function(layout::BeamLayout, max_step::Float64, tol=1.0e-6)
+    xy = generate_compression_function_points(
+    generate_incompressible_intervals(
+        simplify_edge_multiples(
+            generate_interval_edges(layout, tol))), max_step)
+    return x -> evaluate_piecewise_linear(xy, x)
+end
+
 
 ######################## Samples code
 
