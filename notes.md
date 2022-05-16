@@ -11,16 +11,28 @@ Task breakdown, cutting plans:
   Try flipping it if that makes it overall shorter.~~
 * ~~Given a list of simple cutting plans, make a function pack that translates them so that they don't intersect.~~
 * ~~Add flag whether a cutting plan can be mirrored or not.~~
-* Fit the rendering inside the viewable area and render
-* Compress the graphics to be rendered
-* Render a *sequence* of cutting plans instead of just one. Make sure that the output image has adequate size.
+* ~~Compress the graphics to be rendered~~
+* Fit the layout inside the viewable area and render.
+  - Collapse annotations that are close to each other.
+  - Generate unique annotation labels, as needed.
+  - Render the beam label.
 * Return a table with the meaning of different annotations in the figure.
-
+* A BeamGroup <: AbstractBeamGroup: A set of beams (maybe just a vector, or something that can be expanded to a vector)
+  that are rendered to either 
+  - Plans
+  - A 3d model.
+  Every beam gets a unique number (index in the expanded vector). This is assigned at the beginning.
+  When rendering plans, we
+  1. Group beams by similar characteristics. (same face and beam dims)
+  2. For each group, optimize layout.
+  3. Render the plans and the tables.
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)
 
 ### Continuation
+
+More features to make it useful.
 
 * Write function that, given a beam and a direction, it returns the plane key of the beam with the normal that points in that direction. Good for selecting a side of the beam without knowing its exact key.
 * Write a function to check if a beam exists at all (if the intersections is the empty set).
