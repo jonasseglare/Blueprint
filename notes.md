@@ -16,22 +16,23 @@ Task breakdown, cutting plans:
   - ~~Collapse annotations that are close to each other.~~
   - ~~Generate unique annotation labels, as needed.~~
   - ~~Render the beam label.~~
-* A BeamGroup <: AbstractBeamGroup: A set of beams (maybe just a vector, or something that can be expanded to a vector)
-  that are rendered to either 
-  - Plans
-  - A 3d model.
-  Every beam gets a unique number (index in the expanded vector). This is assigned at the beginning.
-  When rendering plans, we
-  1. Group beams by similar characteristics. (same face and beam dims)
-  2. For each group, optimize layout.
-  3. Render the plans and the tables.
+* ~~A BeamGroup <: AbstractBeamGroup: A set of beams (maybe just a vector, or something that can be expanded to a vector)~~
+  ~~that are rendered to either~~
+  - ~~Plans~~
+  - ~~A 3d model.~~
+  ~~Every beam gets a unique number (index in the expanded vector). This is assigned at the beginning.~~
+  ~~When rendering plans, we~~
+  1. ~~Group beams by similar characteristics. (same face and beam dims)~~
+  2. ~~For each group, optimize layout.~~
+  3. ~~Render the plans and the tables.~~
 * Label every beam in a plan
 * Label every annotation in a plan
-* Render the beam boundaries themselves
-* Given a beamgroup for the entire design, generate beam cutting plans for common beams
+* ~~Render the beam boundaries themselves~~ <-- Skips this, just ads clutter.
+* ~~Given a beamgroup for the entire design, generate beam cutting plans for common beams~~
 * Return a table with the meaning of different annotations in the figure.
 * Render a 3d model for an AbstractComponent
 * Render annotations in 3d model (maybe step format required)
+* Render full report
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)
