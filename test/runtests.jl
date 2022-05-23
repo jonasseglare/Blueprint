@@ -5,6 +5,7 @@
 #  2. Command line: julia test/runtests.jl
 
 using Test
+using Setfield
 
 include("../src/Blueprint.jl") # Alternative 1
 #using Blueprint               # Alternative 2: Does not reload changes in REPL
@@ -572,7 +573,7 @@ end
 
 @testset "Beam grouping and operations" begin
     bp = Blueprint
-    bs = bp.beam_specs(1.0, 3.0)
+    bs = @set bp.beam_specs(1.0, 3.0).length = 6.0
     
     beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
 
@@ -598,7 +599,25 @@ end
 
     beams3 = bp.push_against(b.plane, beams2)
     @test -5.0 == bp.min_projection(a.plane, beams3)
-    
+    @test 0.0 == bp.min_projection(b.plane, beams3)
+
+    beamvec = bp.get_beams(beams3)
+
+    @test beamvec[1].index == 0
+    @test beamvec[2].index == 1
+
+    groups = bp.group_by_specs(beamvec)
+    @test 1 == length(groups)
+
+    k = collect(keys(groups))[1]
+    pgroup = groups[k]
+    @test 2 == length(pgroup)
+
+    packed_layouts = bp.pack_plans(groups)
+    @test 1 == length(packed_layouts)
+
+    layouts = packed_layouts[k]
+    @test 2 == length(layouts)
 end
 
 

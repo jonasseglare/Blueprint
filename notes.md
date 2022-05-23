@@ -27,8 +27,11 @@ Task breakdown, cutting plans:
   3. Render the plans and the tables.
 * Label every beam in a plan
 * Label every annotation in a plan
+* Render the beam boundaries themselves
 * Given a beamgroup for the entire design, generate beam cutting plans for common beams
 * Return a table with the meaning of different annotations in the figure.
+* Render a 3d model for an AbstractComponent
+* Render annotations in 3d model (maybe step format required)
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)

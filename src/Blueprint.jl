@@ -552,15 +552,24 @@ struct BeamSpecs
     # Whether a side looks the same as the facing side
     flip_symmetric::Bool
 
+    # Length of the beam
     length::Real
-    # The Z direction is the direction of the beam
+
+    # Margin between pieces on the beam
+    margin::Real
+
+    # The side of the beam used for the plan
+    cutting_plan_key::Symbol
+
+    user_data::Any
 end
 
 default_beam_length = 3.0
 default_beam_color = RgbColor(0.0, 0.0, 1.0)
+default_beam_margin = 0.01
 
 function beam_specs(Xsize::Real, Ysize::Real)
-    return BeamSpecs(Xsize, Ysize, default_beam_color, true, default_beam_length)
+    return BeamSpecs(Xsize, Ysize, default_beam_color, true, default_beam_length, default_beam_margin, beam_X_lower, nothing)
 end
 
 function quadratic_beam_specs(size::Real)
@@ -595,7 +604,7 @@ struct Beam <: AbstractComponent
     specs::BeamSpecs
     polyhedron::Polyhedron
     annotations::AbstractDict{PlaneKey, PersistentVector{Annotation}}
-    key::Any
+    index::Integer
 end
 
 function new_beam(beam_specs::BeamSpecs)
@@ -607,7 +616,7 @@ function new_beam(beam_specs::BeamSpecs)
                                 beam_X_upper => flip(plane_at_dim(1, beam_specs.Xsize)),
                                 beam_Y_lower => ylow,
                                 beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))),
-                Dict{PlaneKey, PersistentVector{Annotation}}(), nothing)
+                Dict{PlaneKey, PersistentVector{Annotation}}(), -1)
 end
 
 function beam_dir(beam::Beam)
@@ -655,7 +664,7 @@ function transform(rigid_transform::RigidTransform{Float64}, beam::Beam)
     return Beam(compose(rigid_transform, beam.transform),
     beam.specs,
     transform(rigid_transform, beam.polyhedron),
-    transform(rigid_transform, beam.annotations), beam.key)
+    transform(rigid_transform, beam.annotations), beam.index)
 end
 
 function set_transform(beam::Beam, new_transform::RigidTransform{Float64})
@@ -678,14 +687,19 @@ function push_bounding_points!(dst::Vector{Vector{Float64}}, beam::Beam)
     end
 end
 
+function get_bounding_points(src)
+    dst = Vector{Vector{Float64}}()
+    push_bounding_points!(dst, src)
+    return dst
+end
+
 function mid_point(beam::Beam)
     return mid_point(beam.polyhedron)
 end
 
 function min_projection(plane::Plane{Float64}, component::AbstractComponent)
     plane = normalize_plane(plane)
-    pts = Vector{Vector{Float64}}()
-    push_bounding_points!(pts, component)
+    pts = get_bounding_points(component)
     if length(pts) == 0
         return 0
     end
@@ -1111,6 +1125,10 @@ function cutting_plan(beam::Beam, k::PlaneKey)
     return cutting_plan(beam, k, beam_dir(beam))
 end
 
+function cutting_plan(beam::Beam)
+    return cutting_plan(beam, beam.specs.cutting_plan_key)
+end
+
 function lx_point(v)
     return lx.Point(v[1], v[2])
 end
@@ -1319,6 +1337,7 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
 
         if best_plan == nothing
             if length(current_beam) == 0
+                @info "Beam length" beam_length
                 error("Cutting plan does not fit in beam")
             else
                 push_layout()
@@ -1576,7 +1595,47 @@ function push_bounding_points!(dst::Vector{Vector{Float64}}, group::Group)
     end
 end
 
+### Pushing the beams
 
+function push_beams!(dst::Vector{Beam}, src::Group)
+    for x in src.components
+        push_beams!(dst, x)
+    end
+end
+
+function push_beams!(dst::Vector{Beam}, src::Beam)
+    push!(dst, @set src.index = length(dst))
+end
+
+function get_beams(src::AbstractComponent)
+    dst = Vector{Beam}()
+    push_beams!(dst, src)
+    return dst
+end
+
+function cutting_plan_grouping_key(specs::BeamSpecs)
+    return @set specs.color = default_beam_color
+end
+
+function group_by_specs(beams::Vector{Beam})
+    dst = Dict{BeamSpecs, Vector{Beam}}()
+    for beam in beams
+        k = cutting_plan_grouping_key(beam.specs)
+        if !(haskey(dst, k))
+            dst[k] = Vector{Beam}()
+        end
+        push!(dst[k], beam)
+    end
+    return dst
+end
+
+function pack_plans(grouped_beams::Dict{BeamSpecs, Vector{Beam}})
+    dst = Dict{BeamSpecs, Vector{BeamLayout}}()
+    for (beam_specs, beams) in grouped_beams
+        dst[beam_specs] = pack([cutting_plan(beam) for beam in beams], beam_specs.length, beam_specs.margin)
+    end
+    return dst
+end
 
 ######################## Samples code
 
