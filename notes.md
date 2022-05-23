@@ -25,8 +25,8 @@ Task breakdown, cutting plans:
   1. ~~Group beams by similar characteristics. (same face and beam dims)~~
   2. ~~For each group, optimize layout.~~
   3. ~~Render the plans and the tables.~~
-* Label every beam in a plan
-* Label every annotation in a plan
+* ~~Label every beam in a plan~~
+* ~~Label every annotation in a plan~~
 * ~~Render the beam boundaries themselves~~ <-- Skips this, just ads clutter.
 * ~~Given a beamgroup for the entire design, generate beam cutting plans for common beams~~
 * Return a table with the meaning of different annotations in the figure.
