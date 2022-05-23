@@ -620,4 +620,13 @@ end
     @test 2 == length(layouts)
 end
 
+## Numeric
 
+@testset "Numeric string in base" begin
+    base = collect("abc")
+    bp = Blueprint
+    @test "a" == bp.numeric_string_in_base(base, 0)
+    @test "b" == bp.numeric_string_in_base(base, 1)
+    @test "c" == bp.numeric_string_in_base(base, 2)
+    @test "ba" == bp.numeric_string_in_base(base, 3)
+end

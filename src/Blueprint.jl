@@ -1046,10 +1046,12 @@ struct BeamCuttingPlan <: AbstractCuttingPlan
 
     # Any annotationss
     annotations::Vector{Annotation}
-
     
     # The bounding box
     bbox::BBox{Float64}
+
+    # Unique index of the beam that it belongs to
+    beam_index::Integer
 end
 
 function plane_cog(polyhedron::Polyhedron, pk::PlaneKey)
@@ -1062,8 +1064,8 @@ function plane_cog(beam::Beam, k::PlaneKey)
 end
 
 # Constructs a cutting plan for a beam.
-function beam_cutting_plan(plane_key::PlaneKey, flipsym::Bool, corners::Vector{CornerPosition}, annotations::Vector{Annotation})
-    return BeamCuttingPlan(plane_key, flipsym, corners, annotations, compute_bbox([corner.position for corner in corners]))
+function beam_cutting_plan(plane_key::PlaneKey, flipsym::Bool, corners::Vector{CornerPosition}, annotations::Vector{Annotation}, beam_index::Integer)
+    return BeamCuttingPlan(plane_key, flipsym, corners, annotations, compute_bbox([corner.position for corner in corners]), beam_index)
 end
 
 function transform(rt::RigidTransform{Float64}, plan::BeamCuttingPlan)
@@ -1071,7 +1073,8 @@ function transform(rt::RigidTransform{Float64}, plan::BeamCuttingPlan)
     plan.plane_key,
     plan.flip_symmetric,
     [@set corner.position = transform_position(rt, corner.position) for corner in plan.corners],
-    [@set annotation.position = transform_position(rt, annotation.position) for annotation in plan.annotations])
+    [@set annotation.position = transform_position(rt, annotation.position) for annotation in plan.annotations],
+    plan.beam_index)
 end
 
 function cutting_plan(
@@ -1118,7 +1121,7 @@ function cutting_plan(
     
     corners = [CornerPosition(corner, localize(beam.polyhedron.corners[corner])) for corner in loop]
     annotations = [@set annotation.position = localize(annotation.position) for annotation in get(beam.annotations, k, PersistentVector{Annotation}())]
-    return beam_cutting_plan(k, beam.specs.flip_symmetric, corners, annotations)
+    return beam_cutting_plan(k, beam.specs.flip_symmetric, corners, annotations, beam.index)
 end
 
 function cutting_plan(beam::Beam, k::PlaneKey)
@@ -1503,6 +1506,38 @@ function compression_function(layout::BeamLayout, max_step::Float64, tol=1.0e-6)
     return x -> evaluate_piecewise_linear(xy, x)
 end
 
+struct AnnotationLabel
+    beam_index::Integer
+    annotation_label::String
+end
+
+function char_range(lower::Char, upper::Char)
+    return [Char(i) for i in Int(lower):Int(upper)]
+end
+
+corner_digits = char_range('a', 'z')
+annotation_digits = char_range('A', 'Z')
+
+function hor(lower, n)
+    return lower:(lower + n - 1)
+end
+
+function list_annotation_labels(beam_index, digits, rng)
+    return [AnnotationLabel(beam_index, numeric_string_in_base(digits, i)) for i in rng]
+end
+
+function short_string(x::AnnotationLabel)
+    return string(x.annotation_label)
+end
+
+function corner_label_orientation(mid, pos)
+    if mid.y < pos.y
+        return 0.5*pi
+    else
+        return 1.5*pi
+    end
+end
+
 # Rendering plans
 # http://juliagraphics.github.io/Luxor.jl/stable/
 function render(layout::BeamLayout, render_config::RenderConfig)
@@ -1534,17 +1569,27 @@ function render(layout::BeamLayout, render_config::RenderConfig)
     lx.Drawing(output_width, output_height, render_config.filename)
     lx.fontsize(render_config.fontsize)
     lx.setdash("solid")
+
+    corner_count = 0
+    annotation_count = 0
+
     for plan in layout.plans
         positions = [pt(corner.position) for corner in plan.corners]
         mid = average(positions)
         lx.poly(positions, :stroke, close=true)
-        lx.label.([string(corner.key) for corner in plan.corners], lx.slope.(mid, positions), positions, offset=offset)
-
+        corner_labels = list_annotation_labels(plan.beam_index, corner_digits, hor(corner_count, length(plan.corners)))
+        annotation_labels = list_annotation_labels(plan.beam_index, annotation_digits, hor(annotation_count, length(plan.annotations)))
+        slopes = corner_label_orientation.(mid, positions)
+        lx.label.([short_string(label) for label in corner_labels], slopes, positions, offset=offset)
         apos = [pt(annotation.position) for annotation in plan.annotations]
         lx.circle.(apos, render_config.marker_size, :fill)
-        lx.label.([short_text(annotation.label) for annotation in plan.annotations], :SE, apos, offset=offset)
+        lx.label.([short_string(label) for label in annotation_labels], :SE, apos, offset=offset)
+
+        lx.label(string(plan.beam_index), :SE, mid, offset=offset)
+        
+        corner_count += length(plan.corners)
+        annotation_count += length(plan.annotations)
     end
-    lx.rulers()
     lx.finish()
     if render_config.preview
         lx.preview()
@@ -1637,10 +1682,17 @@ function pack_plans(grouped_beams::Dict{BeamSpecs, Vector{Beam}})
     return dst
 end
 
+function numeric_string_in_base(base_digits::Vector{Char}, number::Integer)
+    n = length(base_digits)
+    next = div(number, n)
+    next_str = if next == 0 "" else numeric_string_in_base(base_digits, next) end
+    return string(next_str, base_digits[1 + mod(number, n)])
+end
+
 ######################## Samples code
 
 
-function sample_bcp(len::Float64)
+function sample_bcp(len::Float64, i)
     bp = Blueprint
     k = :a
     corners = [CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
@@ -1648,11 +1700,11 @@ function sample_bcp(len::Float64)
                CornerPosition((:a, :d, :e), [1.0, 1.0]),
                CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
     annotations = Vector{Annotation}()
-    return bp.beam_cutting_plan(k, true, corners, annotations)
+    return bp.beam_cutting_plan(k, true, corners, annotations, i)
 end
 
 function demo1()
-    plans = [sample_bcp(1.0), sample_bcp(2.0), sample_bcp(3.0)]
+    plans = [sample_bcp(1.0, 0), sample_bcp(2.0, 1), sample_bcp(3.0, 2)]
     out = pack(plans, 9, 0.25)
 
     render(out[1], default_render_config)
