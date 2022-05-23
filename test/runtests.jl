@@ -282,7 +282,7 @@ end
 
 @testset "New beam test" begin
     bp = Blueprint
-    specs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color, true)
+    specs = bp.beam_specs(1.0, 3.0)
     beam = bp.new_beam(specs)
     @test 4 == length(beam.polyhedron.planes)
     @test 4 == length(beam.polyhedron.bounded_lines)
@@ -318,7 +318,7 @@ end
 
 @testset "Oriented beam test" begin
     bp = Blueprint
-    specs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color, true)
+    specs = bp.beam_specs(1.0, 3.0)
     beam = bp.orient_beam(bp.new_beam(specs), [0.0, 1.0, 0.0], [1.0, 0.0, 0.0])
     @test isapprox(beam.polyhedron.planes[:beam_X_lower].normal, [0.0, 0.0, 1.0], atol=1.0e-6)
     @test isapprox(beam.polyhedron.planes[:beam_X_upper].normal, [0.0, 0.0, -1.0], atol=1.0e-6)
@@ -349,7 +349,7 @@ end
 
 @testset "Drill test" begin
     bp = Blueprint
-    bs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color, true)
+    bs = bp.beam_specs(1.0, 3.0)
 
     A = bp.transform(bp.rigid_transform_from_translation([0.0, 0.0, 1.0]),
                      bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir))
@@ -407,7 +407,7 @@ end
 
 @testset "Obj export test" begin
     bp = Blueprint
-    bs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color, true)
+    bs = bp.beam_specs(1.0, 3.0)
     beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
 
     a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
@@ -435,7 +435,7 @@ end
 
 @testset "Cutting plan test" begin
     bp = Blueprint
-    bs = bp.BeamSpecs(1.0, 3.0, bp.default_beam_color, true)
+    bs = bp.beam_specs(1.0, 3.0)
 
     # Create a new beam that points in the X direction.
     beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
@@ -567,3 +567,25 @@ end
     f = bp.compression_function(layout, 1.0)
     @test 1.75 == f(2.75)
 end
+
+## Beam
+
+@testset "Beam grouping" begin
+    bp = Blueprint
+    bs = bp.beam_specs(1.0, 3.0)
+    
+    beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
+
+    a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+
+    beam0 = bp.cut(a, bp.cut(b, beam))
+    beam1 = bp.transform(bp.rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
+
+    @test 1 == length(bp.group([beam0]).components)
+    @test 2 == length(bp.group([beam0, [[[[beam1]]]]]).components)
+    @test 2 == length(bp.group(bp.group([beam0, [[[[beam1]]]]])).components)
+    
+end
+
+

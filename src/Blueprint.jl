@@ -8,7 +8,7 @@ using Setfield
 import Luxor
 const lx = Luxor
 
-abstract type PhysicalObject end
+abstract type AbstractComponent end
 
 ### Planes
 
@@ -552,14 +552,15 @@ struct BeamSpecs
     # Whether a side looks the same as the facing side
     flip_symmetric::Bool
 
-    
+    length::Real
     # The Z direction is the direction of the beam
 end
 
+default_beam_length = 3.0
 default_beam_color = RgbColor(0.0, 0.0, 1.0)
 
 function beam_specs(Xsize::Real, Ysize::Real)
-    return BeamSpecs(Xsize, Ysize, default_beam_color, true)
+    return BeamSpecs(Xsize, Ysize, default_beam_color, true, default_beam_length)
 end
 
 function quadratic_beam_specs(size::Real)
@@ -589,7 +590,7 @@ struct Annotation
 end
 
 
-struct Beam <: PhysicalObject
+struct Beam <: AbstractComponent
     transform::RigidTransform{Float64}
     specs::BeamSpecs
     polyhedron::Polyhedron
@@ -1139,39 +1140,6 @@ function average(positions)
     return (1.0/length(positions))*reduce(+, positions)
 end
 
-
-function render_pdf(body_fn, render_config::RenderConfig)
-    @lx.pdf begin
-        function local_pt(x)
-            return lx_point(render_config.render_factor*x)
-        end
-        body_fn(local_pt)
-    end render_config.width render_config.height render_config.filename
-end
-
-function render(cp::BeamCuttingPlan, render_config::RenderConfig)
-    function sub(local_pt)
-        @info "The matrix is" lx.getmatrix()
-        offset = render_config.offset
-        
-        lx.fontsize(render_config.fontsize)
-        n = length(cp.corners)
-        lx.setdash("solid")
-        positions = [local_pt(corner.position) for corner in cp.corners]
-        mid = average(positions)
-        lx.poly(positions, :stroke, close=true)
-        lx.label.([string(corner.key) for corner in cp.corners], lx.slope.(mid, positions), positions, offset=offset)
-
-        apos = [local_pt(annotation.position) for annotation in cp.annotations]
-
-        lx.circle.(apos, render_config.marker_size, :fill)
-        lx.label.([short_text(annotation.label) for annotation in cp.annotations], :SE, apos, offset=offset)
-
-        lx.rulers()
-     end
-    render_pdf(sub, render_config)
-end
-
 function loop_bounding_planes(positions::Vector{Vector{Float64}})
     c = average(positions)
     n = length(positions)
@@ -1552,7 +1520,39 @@ function render(layout::BeamLayout, render_config::RenderConfig)
     end
 end
 
+### More components
 
+struct Group <: AbstractComponent
+    components::Vector{AbstractComponent}
+end
+
+function group_sub!(dst, src::Group)
+    for x in src.components
+        group_sub!(dst, x)
+    end
+end
+
+function group_sub!(dst, src::AbstractComponent)
+    push!(dst, src)
+end
+
+function group_sub!(dst, src::Vector{T}) where {T}
+    for x in src
+        group_sub!(dst, x)
+    end
+end
+
+function group_sub!(dst, src::Tuple{T}) where {T}
+    for x in src
+        group_sub!(dst, x)
+    end
+end
+
+function group(components...)
+    dst = Vector{AbstractComponent}()
+    group_sub!(dst, components)
+    return Group(dst)
+end
 
 ######################## Samples code
 
@@ -1566,39 +1566,6 @@ function sample_bcp(len::Float64)
                CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
     annotations = Vector{Annotation}()
     return bp.beam_cutting_plan(k, true, corners, annotations)
-end
-
-function demo0()
-    bs = BeamSpecs(1.0, 2.0, default_beam_color, true)
-
-    # Create a new beam that points in the X direction.
-    beam = orient_beam(new_beam(bs), [1.0, 0.0, 0.0], local_y_dir)
-
-    # Cut the beam at 0.0 and 4.5.
-    a = NamedPlane(:a, plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
-    b = NamedPlane(:b, plane_at_pos([-1.0, 0.0, 0.3], [4.5, 0.0, 0.0]))
-
-    beam = cut(a, cut(b, beam))
-
-    
-    # This is the plane key to render. Take the side of the beam. It should have length 4.5 and height 3.0
-    k = :beam_X_lower
-
-    dpspecs = DrillingPlaneSpecs(0.25, 2)
-    drilling_dir = [0.0, 1.0, 0.0]
-    
-    beam_planes = generate_drilling_planes(beam, dpspecs, drilling_dir)
-    cut_planes = translate_normalized.([a.plane, b.plane], dpspecs.marg)
-    drills = generate_drills(drilling_dir, beam_planes, cut_planes, DrillSpecs(0.003))
-
-    beam = drill(beam, drills)
-    
-
-    # Make a plan for that plane
-    plan = cutting_plan(beam, k)
-
-    # Render the plan
-    render(plan, default_render_config)
 end
 
 function demo1()
@@ -1616,4 +1583,4 @@ end # module
 
 
 # ONLY FOR DEBUG
-Blueprint.demo1()
+#Blueprint.demo1()

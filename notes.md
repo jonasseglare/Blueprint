@@ -12,11 +12,10 @@ Task breakdown, cutting plans:
 * ~~Given a list of simple cutting plans, make a function pack that translates them so that they don't intersect.~~
 * ~~Add flag whether a cutting plan can be mirrored or not.~~
 * ~~Compress the graphics to be rendered~~
-* Fit the layout inside the viewable area and render.
-  - Collapse annotations that are close to each other.
-  - Generate unique annotation labels, as needed.
-  - Render the beam label.
-* Return a table with the meaning of different annotations in the figure.
+* ~~Fit the layout inside the viewable area and render.~~
+  - ~~Collapse annotations that are close to each other.~~
+  - ~~Generate unique annotation labels, as needed.~~
+  - ~~Render the beam label.~~
 * A BeamGroup <: AbstractBeamGroup: A set of beams (maybe just a vector, or something that can be expanded to a vector)
   that are rendered to either 
   - Plans
@@ -26,6 +25,10 @@ Task breakdown, cutting plans:
   1. Group beams by similar characteristics. (same face and beam dims)
   2. For each group, optimize layout.
   3. Render the plans and the tables.
+* Label every beam in a plan
+* Label every annotation in a plan
+* Given a beamgroup for the entire design, generate beam cutting plans for common beams
+* Return a table with the meaning of different annotations in the figure.
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)
