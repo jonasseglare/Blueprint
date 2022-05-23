@@ -570,7 +570,7 @@ end
 
 ## Beam
 
-@testset "Beam grouping" begin
+@testset "Beam grouping and operations" begin
     bp = Blueprint
     bs = bp.beam_specs(1.0, 3.0)
     
@@ -585,6 +585,19 @@ end
     @test 1 == length(bp.group([beam0]).components)
     @test 2 == length(bp.group([beam0, [[[[beam1]]]]]).components)
     @test 2 == length(bp.group(bp.group([beam0, [[[[beam1]]]]])).components)
+
+
+    beams = bp.group([beam0, beam1])
+    @test 2 == length(beams.components)
+    @test 0.0 == bp.min_projection(a.plane, beams)
+    @test -5.0 == bp.min_projection(b.plane, beams)
+
+    beams2 = bp.transform(bp.rigid_transform_from_translation([2.5, 0.0, 0.0]), beams)
+    @test 2.5 == bp.min_projection(a.plane, beams2)
+    @test -7.5 == bp.min_projection(b.plane, beams2)
+
+    beams3 = bp.push_against(b.plane, beams2)
+    @test -5.0 == bp.min_projection(a.plane, beams3)
     
 end
 

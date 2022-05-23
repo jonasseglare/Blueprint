@@ -595,6 +595,7 @@ struct Beam <: AbstractComponent
     specs::BeamSpecs
     polyhedron::Polyhedron
     annotations::AbstractDict{PlaneKey, PersistentVector{Annotation}}
+    key::Any
 end
 
 function new_beam(beam_specs::BeamSpecs)
@@ -606,7 +607,7 @@ function new_beam(beam_specs::BeamSpecs)
                                 beam_X_upper => flip(plane_at_dim(1, beam_specs.Xsize)),
                                 beam_Y_lower => ylow,
                                 beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))),
-                Dict{PlaneKey, PersistentVector{Annotation}}())
+                Dict{PlaneKey, PersistentVector{Annotation}}(), nothing)
 end
 
 function beam_dir(beam::Beam)
@@ -654,7 +655,7 @@ function transform(rigid_transform::RigidTransform{Float64}, beam::Beam)
     return Beam(compose(rigid_transform, beam.transform),
     beam.specs,
     transform(rigid_transform, beam.polyhedron),
-    transform(rigid_transform, beam.annotations))
+    transform(rigid_transform, beam.annotations), beam.key)
 end
 
 function set_transform(beam::Beam, new_transform::RigidTransform{Float64})
@@ -671,20 +672,31 @@ function bounding_points(beam::Beam)::AbstractVector{Vector{Float64}}
     return bounding_points(beam.polyhedron)
 end
 
+function push_bounding_points!(dst::Vector{Vector{Float64}}, beam::Beam)
+    for x in bounding_points(beam)
+        push!(dst, x)
+    end
+end
+
 function mid_point(beam::Beam)
     return mid_point(beam.polyhedron)
 end
 
-function push_against(plane::Plane{Float64}, beam::Beam)
+function min_projection(plane::Plane{Float64}, component::AbstractComponent)
     plane = normalize_plane(plane)
-    pts = bounding_points(beam)
+    pts = Vector{Vector{Float64}}()
+    push_bounding_points!(pts, component)
     if length(pts) == 0
-        return beam
+        return 0
     end
     shifts = map(pt -> evaluate(plane, pt), pts)
-    shift = minimum(shifts)
+    return minimum(shifts)
+end
+
+function push_against(plane::Plane{Float64}, component::AbstractComponent)
+    shift = min_projection(plane, component)
     translation = rigid_transform_from_translation(-shift*plane.normal)
-    return transform(translation, beam)
+    return transform(translation, component)
 end
 
 struct NamedPlane
@@ -1553,6 +1565,18 @@ function group(components...)
     group_sub!(dst, components)
     return Group(dst)
 end
+
+function transform(rigid_transform::RigidTransform{Float64}, src::Group)
+    return group([transform(rigid_transform, component) for component in src.components])
+end
+
+function push_bounding_points!(dst::Vector{Vector{Float64}}, group::Group)
+    for x in group.components
+        push_bounding_points!(dst, x)
+    end
+end
+
+
 
 ######################## Samples code
 
