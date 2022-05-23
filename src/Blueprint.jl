@@ -1103,17 +1103,33 @@ function lx_point(v)
 end
 
 struct RenderConfig
-    render_factor::Number
-    fontsize::Number
-    offset::Number
-    marker_size::Number
-
-    width::Number
-    height::Number
+    fontsize::Float64
+    marker_size::Float64
+    output_beam_height::Float64
+    margin::Float64
     filename::String
+    preview::Bool
+    offset::Float64
 end
 
-const default_render_config = RenderConfig(100, 12, 5, 5, 600, 600, "/tmp/blueprint_sketch.pdf")
+const default_render_config = RenderConfig(12, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5)
+
+struct LineKM{T}
+    k::T
+    m::T
+end
+
+function (line::LineKM{T})(x) where {T}
+    return line.k*x + line.m
+end
+
+function fit_line(x0::T, x1::T, y0::T, y1::T)::LineKM{T} where {T}
+    k = (y1 - y0)/(x1 - x0)
+    m = y0 - k*x0
+    return LineKM{T}(k, m)
+end
+
+
 
 function solve_plane_key(ikey::PlaneKeyTuple3, jkey::PlaneKeyTuple3)
     return none
@@ -1155,8 +1171,6 @@ function render(cp::BeamCuttingPlan, render_config::RenderConfig)
      end
     render_pdf(sub, render_config)
 end
-# Rendering plans
-# http://juliagraphics.github.io/Luxor.jl/stable/
 
 function loop_bounding_planes(positions::Vector{Vector{Float64}})
     c = average(positions)
@@ -1196,6 +1210,7 @@ function solve_push_segments(left, pos, dir)
         return nothing
     end
 end
+
 
 function push_loop_against_loop(
     corners_a::Vector{Vector64},
@@ -1489,6 +1504,55 @@ function compression_function(layout::BeamLayout, max_step::Float64, tol=1.0e-6)
     return x -> evaluate_piecewise_linear(xy, x)
 end
 
+# Rendering plans
+# http://juliagraphics.github.io/Luxor.jl/stable/
+function render(layout::BeamLayout, render_config::RenderConfig)
+    box = bbox(layout)
+    margin = render_config.margin
+    
+    hinterval = box.intervals[1]
+    vinterval = box.intervals[2]
+    
+    layout_width = width(hinterval)
+    layout_height = width(vinterval)
+    xf = compression_function(layout, layout_height)
+    scale = render_config.output_beam_height/layout_height
+
+    compressed_width = xf(hinterval.upper) - xf(hinterval.lower)
+
+    output_width = 2*margin + scale*compressed_width
+    output_height = 2*margin + scale*layout_height
+
+    x_line = fit_line(xf(hinterval.lower), xf(hinterval.upper), render_config.margin, render_config.margin + scale*compressed_width)
+    y_line = fit_line(vinterval.lower, vinterval.upper, render_config.margin, render_config.margin + scale*layout_height)
+
+    function pt(xy)
+        (x, y) = xy
+        return lx.Point(x_line(xf(x)), y_line(y))
+    end
+
+    offset = render_config.offset
+    lx.Drawing(output_width, output_height, render_config.filename)
+    lx.fontsize(render_config.fontsize)
+    lx.setdash("solid")
+    for plan in layout.plans
+        positions = [pt(corner.position) for corner in plan.corners]
+        mid = average(positions)
+        lx.poly(positions, :stroke, close=true)
+        lx.label.([string(corner.key) for corner in plan.corners], lx.slope.(mid, positions), positions, offset=offset)
+
+        apos = [pt(annotation.position) for annotation in plan.annotations]
+        lx.circle.(apos, render_config.marker_size, :fill)
+        lx.label.([short_text(annotation.label) for annotation in plan.annotations], :SE, apos, offset=offset)
+    end
+    lx.rulers()
+    lx.finish()
+    if render_config.preview
+        lx.preview()
+    end
+end
+
+
 
 ######################## Samples code
 
@@ -1496,11 +1560,11 @@ end
 function sample_bcp(len::Float64)
     bp = Blueprint
     k = :a
-    corners = [bp.CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
-               bp.CornerPosition((:a, :c, :d), [0.0, 0.0]),
-               bp.CornerPosition((:a, :d, :e), [1.0, 1.0]),
-               bp.CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
-    annotations = Vector{bp.Annotation}()
+    corners = [CornerPosition((:a, :b, :c), [2.0 + len, 0.0]),
+               CornerPosition((:a, :c, :d), [0.0, 0.0]),
+               CornerPosition((:a, :d, :e), [1.0, 1.0]),
+               CornerPosition((:a, :b, :e), [1.0 + len, 1.0])]
+    annotations = Vector{Annotation}()
     return bp.beam_cutting_plan(k, true, corners, annotations)
 end
 
@@ -1533,16 +1597,13 @@ function demo0()
     # Make a plan for that plane
     plan = cutting_plan(beam, k)
 
-    println(string("Corners: ", length(plan.corners)))
-    println(string("Annotations: ", length(plan.annotations)))
-
     # Render the plan
     render(plan, default_render_config)
 end
 
 function demo1()
     plans = [sample_bcp(1.0), sample_bcp(2.0), sample_bcp(3.0)]
-    out = bp.pack(plans, 9, 0.25)
+    out = pack(plans, 9, 0.25)
 
     render(out[1], default_render_config)
 end
@@ -1555,4 +1616,4 @@ end # module
 
 
 # ONLY FOR DEBUG
-#Blueprint.demo()
+Blueprint.demo1()
