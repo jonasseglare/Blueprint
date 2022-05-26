@@ -16,6 +16,7 @@ const PlaneKey = Symbol
 const PlaneKeyTuple2 = Tuple{PlaneKey, PlaneKey}
 const PlaneKeyTuple3 = Tuple{PlaneKey, PlaneKey, PlaneKey}
 const Vector64 = Vector{Float64}
+const Namespace = PersistentVector{Symbol}
 
 struct DefinedInterval{T}
     lower::T
@@ -543,6 +544,7 @@ struct RgbColor
     blue::Float64
 end
 
+# Common properties for beams when they are constructed
 struct BeamSpecs
     Xsize::Real
     Ysize::Real
@@ -555,13 +557,19 @@ struct BeamSpecs
     # Length of the beam
     length::Real
 
-    # Margin between pieces on the beam
+    # Margin between pieces when producing a BeamLayout
     margin::Real
 
     # The side of the beam used for the plan
     cutting_plan_key::Symbol
 
     user_data::Any
+
+    # Used to control what is included in a 3d rendering
+    level::Integer
+
+    # Used for grouping beams into namespace
+    namespace::Namespace
 end
 
 default_beam_length = 3.0
@@ -569,7 +577,10 @@ default_beam_color = RgbColor(0.0, 0.0, 1.0)
 default_beam_margin = 0.01
 
 function beam_specs(Xsize::Real, Ysize::Real)
-    return BeamSpecs(Xsize, Ysize, default_beam_color, true, default_beam_length, default_beam_margin, beam_X_lower, nothing)
+    return BeamSpecs(
+    Xsize, Ysize, default_beam_color, true,
+    default_beam_length, default_beam_margin,
+    beam_X_lower, nothing, 0, pvec(Vector{Symbol}()))
 end
 
 function quadratic_beam_specs(size::Real)
@@ -1630,6 +1641,8 @@ function group(components...)
     return Group(dst)
 end
 
+# Operations on groups
+
 function transform(rigid_transform::RigidTransform{Float64}, src::Group)
     return group([transform(rigid_transform, component) for component in src.components])
 end
@@ -1638,6 +1651,10 @@ function push_bounding_points!(dst::Vector{Vector{Float64}}, group::Group)
     for x in group.components
         push_bounding_points!(dst, x)
     end
+end
+
+function cut(plane::NamedPlane, beamgroup::Group)
+    return group([cut(plane, x) for x in beamgroup.components])
 end
 
 ### Pushing the beams
@@ -1659,7 +1676,10 @@ function get_beams(src::AbstractComponent)
 end
 
 function cutting_plan_grouping_key(specs::BeamSpecs)
-    return @set specs.color = default_beam_color
+    # Reset fields that are used for controlling appearance when rendering
+    specs = @set specs.color = default_beam_color
+    specs = @set specs.level = 0
+    return specs
 end
 
 function group_by_specs(beams::Vector{Beam})

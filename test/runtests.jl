@@ -534,7 +534,7 @@ end
 
 @testset "Cut plan optimization" begin
     bp = Blueprint
-    plans = [bp.sample_bcp(1.0), bp.sample_bcp(2.0), bp.sample_bcp(3.0)]
+    plans = [bp.sample_bcp(1.0, 0), bp.sample_bcp(2.0, 1), bp.sample_bcp(3.0, 2)]
 
     out = bp.pack(plans, 9, 0.25)
 

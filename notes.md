@@ -29,19 +29,32 @@ Task breakdown, cutting plans:
 * ~~Label every annotation in a plan~~
 * ~~Render the beam boundaries themselves~~ <-- Skips this, just ads clutter.
 * ~~Given a beamgroup for the entire design, generate beam cutting plans for common beams~~
+* Write a function to check if a beam exists at all (if the intersections is the empty set).
 * Return a table with the meaning of different annotations in the figure.
-* Render a 3d model for an AbstractComponent
+* Render full report (markdown and HTML)
+* Render a 3d model for an AbstractComponent in OBJ format
 * Render annotations in 3d model (maybe step format required)
-* Render full report
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)
+
+### Cad formats
+
+* [STL](https://en.wikipedia.org/wiki/STL_(file_format)):
+  - Human readable
+  - Triangles
+* [STEP](https://en.wikipedia.org/wiki/ISO_10303-21)
+  - Human readable
+  - Instance names
+  - Many entities
+
 
 ### Continuation
 
 More features to make it useful.
 
+* Beam array
+* Drilling routines for groups
+* Miter cut
 * Write function that, given a beam and a direction, it returns the plane key of the beam with the normal that points in that direction. Good for selecting a side of the beam without knowing its exact key.
-* Write a function to check if a beam exists at all (if the intersections is the empty set).
-* Write functions to work with *groups of beams*: translation, etc. Maybe a an abstract class. <-- SPECIFY THIS.
-* Render HTML report.
+* ~~Write functions to work with groups of beams: translation, etc. Maybe a an abstract class.~~
