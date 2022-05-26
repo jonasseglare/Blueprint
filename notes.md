@@ -30,7 +30,7 @@ Task breakdown, cutting plans:
 * ~~Render the beam boundaries themselves~~ <-- Skips this, just ads clutter.
 * ~~Given a beamgroup for the entire design, generate beam cutting plans for common beams~~
 * ~~Write a function to check if a beam exists at all (if the intersections is the empty set).~~
-* Return a table with the meaning of different annotations in the figure.
+* ~~Return a table with the meaning of different annotations in the figure.~~
 * Render full report (markdown and HTML)
 * Render a 3d model for an AbstractComponent in OBJ format
 * Render annotations in 3d model (maybe step format required)

@@ -1,8 +1,10 @@
 module Blueprint
 
+using Printf
 using FunctionalCollections
 using LinearAlgebra
 using Setfield
+using Base.Filesystem
 
 #using Luxor
 import Luxor
@@ -578,6 +580,10 @@ struct BeamSpecs
 
     # Used for grouping beams into namespace
     namespace::Namespace
+end
+
+function beam_specs_order(specs::BeamSpecs)
+    return (specs.Xsize, specs.Ysize, specs.length)
 end
 
 default_beam_length = 3.0
@@ -1531,7 +1537,7 @@ end
 
 struct AnnotationLabel
     beam_index::Integer
-    annotation_label::String
+    label::String
 end
 
 function char_range(lower::Char, upper::Char)
@@ -1550,7 +1556,7 @@ function list_annotation_labels(beam_index, digits, rng)
 end
 
 function short_string(x::AnnotationLabel)
-    return string(x.annotation_label)
+    return string(x.label)
 end
 
 function corner_label_orientation(mid, pos)
@@ -1767,6 +1773,108 @@ function numeric_string_in_base(base_digits::Vector{Char}, number::Integer)
     return string(next_str, base_digits[1 + mod(number, n)])
 end
 
+struct Report
+    project_name::String
+    top_component::AbstractComponent
+    render_config::RenderConfig
+end
+
+function basic_report(project_name::String, top_component::AbstractComponent)
+    return Report(project_name, top_component, default_render_config)
+end
+
+function layout_order(pair::Tuple{BeamSpecs, Vector{BeamLayout}})
+    return (beam_specs_order(pair[1]), length(pair[2]))
+end
+
+function title(specs::BeamSpecs)
+    return @sprintf("Beam dims %.3fx%.3fx%.3f", specs.Xsize, specs.Ysize, specs.length)
+end
+
+abstract type DocNode end
+
+struct DocGroup <: DocNode
+    children::Vector{DocNode}
+end
+
+struct DocSection <: DocNode
+    title::String
+    child::DocNode
+end
+
+struct DocImage <: DocNode
+    filename::String
+end
+
+struct TableRow
+    cells::Vector{Any}
+end
+
+struct DocTable <: DocNode
+    header::TableRow
+    rows::Vector{TableRow}
+end
+
+function format_measure(x)
+    return @sprintf("%.3f", x) # Millimeters
+end
+
+function annotation_row(pt::DiagramPoint)
+    return TableRow([pt.label.beam_index, pt.label.label,
+                     format_measure(pt.position[1]),
+                     format_measure(pt.position[2]), ""])
+end
+
+function annotation_row(d::DiagramDistance)
+    return TableRow([d.label.beam_index, d.label.label, nothing, nothing, format_measure(d.distance)])
+end
+
+function annotation_table(annotations::Vector{DiagramAnnotation})
+    header = TableRow(["Beam", "Label", "X", "Y", "Length"])
+    rows = Vector{TableRow}()
+    for annotation in annotations
+        push!(rows, annotation_row(annotation))
+    end
+    return DocTable(header, rows)
+end
+
+function make(dst_root::String, report::Report)
+    render_config = report.render_config
+    render_config = @set render_config.preview = false
+    
+    
+    # Where images are rendered
+    mkpath(dst_root)
+    doc = Vector{DocNode}()
+
+    diagram_counter = 0
+    beams = get_beams(report.top_component)
+    groups = group_by_specs(beams)
+    packed_layouts = pack_plans(groups)
+
+    sorted_layouts = sort(collect(packed_layouts), by=layout_order)
+
+    for (beam_specs, layouts) in sorted_layouts
+        specnodes = Vector{DocNode}()
+
+        n = length(layouts)
+        for (i, layout) in enumerate(layouts)
+            diagram_svg_name = joinpath(dst_root, @sprintf("diagram%03d.svg", diagram_counter))
+            diagram_render_config = @set render_config.filename = diagram_svg_name
+            
+            annotations = render(layout, diagram_render_config)
+            
+            layout_nodes = Vector{DocNode}()
+            push!(layout_nodes, annotation_table(annotations))
+            push!(layout_nodes, DocImage(diagram_svg_name))
+            push!(specnodes, DocSection(@sprintf("Layout %d/%d", i, n), DocGroup(layout_nodes)))
+            diagram_counter += 1
+        end
+        push!(doc, DocSection(title(beam_specs), DocGroup(specnodes)))
+    end
+    return DocSection(report.project_name, DocGroup(doc))
+end
+
 ######################## Samples code
 
 
@@ -1789,6 +1897,20 @@ function demo1()
     @info "Annotations" annotations
 end
 
+function demo2()
+    bs = @set beam_specs(1.0, 3.0).length = 6.0
+    
+    beam = orient_beam(new_beam(bs), [1.0, 0.0, 0.0], local_y_dir)
+
+    a = NamedPlane(:a, plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = NamedPlane(:b, plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+
+    beam0 = cut(a, cut(b, beam))
+    beam1 = transform(rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
+
+    report = basic_report("Just a sketch", group([beam0, beam1]))
+    make("/tmp/demo2report", report)
+end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.
 
@@ -1797,4 +1919,4 @@ end # module
 
 
 # ONLY FOR DEBUG
-#Blueprint.demo1()
+Blueprint.demo2()
