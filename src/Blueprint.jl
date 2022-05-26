@@ -1561,9 +1561,30 @@ function corner_label_orientation(mid, pos)
     end
 end
 
+abstract type DiagramAnnotation end
+
+struct DiagramPoint <: DiagramAnnotation
+    label::AnnotationLabel
+    position::Vector{Float64}
+end
+
+struct DiagramDistance <: DiagramAnnotation
+    label::AnnotationLabel
+    distance::Number
+end
+
+function annotation_order(pt::DiagramPoint)
+    return (0, pt.position[1], pt.position[2])
+end
+
+function annotation_order(d::DiagramDistance)
+    return (1, d.distance, 0.0)
+end
+
 # Rendering plans
 # http://juliagraphics.github.io/Luxor.jl/stable/
 function render(layout::BeamLayout, render_config::RenderConfig)
+    annotations = Vector{DiagramAnnotation}()
     box = bbox(layout)
     margin = render_config.margin
     
@@ -1597,10 +1618,20 @@ function render(layout::BeamLayout, render_config::RenderConfig)
     annotation_count = 0
 
     for plan in layout.plans
+        sub_annotations = Vector{DiagramAnnotation}()
         positions = [pt(corner.position) for corner in plan.corners]
         mid = average(positions)
         lx.poly(positions, :stroke, close=true)
         corner_labels = list_annotation_labels(plan.beam_index, corner_digits, hor(corner_count, length(plan.corners)))
+
+        for (label, corner) in zip(corner_labels, plan.corners)
+            push!(sub_annotations, DiagramPoint(label, corner.position))
+        end
+        push!(sub_annotations, DiagramDistance(AnnotationLabel(
+            plan.beam_index, "Overall length"), width(plan.bbox.intervals[1])))
+        push!(sub_annotations, DiagramDistance(AnnotationLabel(
+            plan.beam_index, "Overall height"), width(plan.bbox.intervals[2])))
+        
         annotation_labels = list_annotation_labels(plan.beam_index, annotation_digits, hor(annotation_count, length(plan.annotations)))
         slopes = corner_label_orientation.(mid, positions)
         lx.label.([short_string(label) for label in corner_labels], slopes, positions, offset=offset)
@@ -1612,11 +1643,16 @@ function render(layout::BeamLayout, render_config::RenderConfig)
         
         corner_count += length(plan.corners)
         annotation_count += length(plan.annotations)
+
+        for annot in sort(sub_annotations, by=annotation_order)
+            push!(annotations, annot)
+        end
     end
     lx.finish()
     if render_config.preview
         lx.preview()
     end
+    return annotations
 end
 
 ### More components
@@ -1749,7 +1785,8 @@ function demo1()
     plans = [sample_bcp(1.0, 0), sample_bcp(2.0, 1), sample_bcp(3.0, 2)]
     out = pack(plans, 9, 0.25)
 
-    render(out[1], default_render_config)
+    annotations = render(out[1], default_render_config)
+    @info "Annotations" annotations
 end
 
 
