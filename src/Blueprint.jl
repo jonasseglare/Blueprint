@@ -374,6 +374,10 @@ function compute_bounded_lines(plane_map::PersistentHashMap{PlaneKey,Plane{Float
             plane_intersections[(p0, p1)] = bounds
         end
     end
+
+    if length(plane_intersections) == 0
+        return PersistentHashMap{Tuple{PlaneKey, PlaneKey}, LineBounds}()
+    end
     
     return phmap(collect(plane_intersections))
 end
@@ -460,6 +464,10 @@ function polyhedron_from_planes(plane_map::AbstractDict{PlaneKey,Plane{Float64}}
     bounded_lines = compute_bounded_lines(plane_map)
     corners = collect_corners(bounded_lines)
     return Polyhedron(remove_planes_without_corners(plane_map, corners), bounded_lines, corners)
+end
+
+function has_corners(polyhedron::Polyhedron)
+    return 0 < length(polyhedron.corners)
 end
 
 function add_planes(polyhedron::Polyhedron, plane_map::AbstractDict{PlaneKey,Plane{Float64}})::Polyhedron
@@ -628,6 +636,10 @@ function new_beam(beam_specs::BeamSpecs)
                                 beam_Y_lower => ylow,
                                 beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))),
                 Dict{PlaneKey, PersistentVector{Annotation}}(), -1)
+end
+
+function has_corners(beam::Beam)
+    return has_corners(beam.polyhedron)
 end
 
 function beam_dir(beam::Beam)
@@ -1659,20 +1671,30 @@ end
 
 ### Pushing the beams
 
-function push_beams!(dst::Vector{Beam}, src::Group)
-    for x in src.components
-        push_beams!(dst, x)
+abstract type ComponentVisitor end
+abstract type BeamVisitor <: ComponentVisitor end
+
+struct VisibleBeamCollector <: BeamVisitor
+    beams::Vector{Beam}
+end
+
+function visit(dst::VisibleBeamCollector, src::Beam)
+    if has_corners(src)
+        index = length(dst.beams)
+        push!(dst.beams, @set src.index = index)
     end
 end
 
-function push_beams!(dst::Vector{Beam}, src::Beam)
-    push!(dst, @set src.index = length(dst))
+function visit(dst::BeamVisitor, src::Group)
+    for x in src.components
+        visit(dst, x)
+    end
 end
 
 function get_beams(src::AbstractComponent)
-    dst = Vector{Beam}()
-    push_beams!(dst, src)
-    return dst
+    dst = VisibleBeamCollector(Vector{Beam}())
+    visit(dst, src)
+    return dst.beams
 end
 
 function cutting_plan_grouping_key(specs::BeamSpecs)

@@ -135,6 +135,26 @@ end
     @test [0.0, 0.0, 1.0] == polyhedron.corners[(:x, :xyz, :y)]
 end
 
+## Empty polyhedron
+
+@testset "Empty polyhedron" begin
+    bp = Blueprint
+    planes = @Persistent Dict(:x => bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+                              :y => bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+                              :z => bp.plane_at_pos([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]),
+                              :xyz => bp.plane_at_pos([-1.0, -1.0, -1.0], [-1.0, 0.0, 0.0]))
+                              
+    polyhedron = bp.polyhedron_from_planes(planes)
+
+    @test !bp.has_corners(polyhedron)
+    
+    @test 4 == length(polyhedron.planes)
+    @test 0 == length(polyhedron.bounded_lines)
+    @test 0 == length(polyhedron.corners)
+end
+
+
+## Half space
 
 @testset "Half-space test" begin
     bp = Blueprint
@@ -321,6 +341,7 @@ end
     bp = Blueprint
     specs = bp.beam_specs(1.0, 3.0)
     beam = bp.orient_beam(bp.new_beam(specs), [0.0, 1.0, 0.0], [1.0, 0.0, 0.0])
+    @test !bp.has_corners(beam)
     @test isapprox(beam.polyhedron.planes[:beam_X_lower].normal, [0.0, 0.0, 1.0], atol=1.0e-6)
     @test isapprox(beam.polyhedron.planes[:beam_X_upper].normal, [0.0, 0.0, -1.0], atol=1.0e-6)
     @test isapprox(beam.polyhedron.planes[:beam_Y_lower].normal, [1.0, 0.0, 0.0], atol=1.0e-6)
@@ -345,6 +366,7 @@ end
     wall = bp.NamedPlane(:wall, bp.plane_at_pos([0.0, -1.0, 0.0], [0.0, 0.0, 0.0]))
 
     beam2 = bp.cut(wall, beam)
+    @test bp.has_corners(beam2)
     @test 4 == length(beam2.polyhedron.corners)
 end
 
@@ -356,6 +378,8 @@ end
                      bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir))
     B = bp.orient_beam(bp.new_beam(bs), [0.0, 1.0, 0.0], bp.local_y_dir)
 
+    @test !bp.has_corners(A)
+    
     Apt = bp.mid_point(A)
     Bpt = bp.mid_point(B)
 
