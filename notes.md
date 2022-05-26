@@ -31,9 +31,10 @@ Task breakdown, cutting plans:
 * ~~Given a beamgroup for the entire design, generate beam cutting plans for common beams~~
 * ~~Write a function to check if a beam exists at all (if the intersections is the empty set).~~
 * ~~Return a table with the meaning of different annotations in the figure.~~
-* Render full report (markdown and HTML)
-* Render a 3d model for an AbstractComponent in OBJ format
-* Render annotations in 3d model (maybe step format required)
+* ~~Render full report in HTML~~
+* Render full report in Markdown
+* Render a 3d model for an AbstractComponent STEP format
+* Render a 3d model for an AbstractComponent in STL format (for online viewing)
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)

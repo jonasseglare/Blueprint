@@ -554,6 +554,16 @@ struct RgbColor
     blue::Float64
 end
 
+abstract type DiagramStrategy end
+
+struct PackedDiagramStrategy <: DiagramStrategy
+    # Margin between pieces when producing a BeamLayout
+    margin::Real
+
+    # The side of the beam used for the plan
+    cutting_plan_key::Symbol
+end
+
 # Common properties for beams when they are constructed
 struct BeamSpecs
     Xsize::Real
@@ -567,11 +577,8 @@ struct BeamSpecs
     # Length of the beam
     length::Real
 
-    # Margin between pieces when producing a BeamLayout
-    margin::Real
-
-    # The side of the beam used for the plan
-    cutting_plan_key::Symbol
+    # How diagrams are rendered
+    diagram_strategy::DiagramStrategy
 
     user_data::Any
 
@@ -593,8 +600,9 @@ default_beam_margin = 0.01
 function beam_specs(Xsize::Real, Ysize::Real)
     return BeamSpecs(
     Xsize, Ysize, default_beam_color, true,
-    default_beam_length, default_beam_margin,
-    beam_X_lower, nothing, 0, pvec(Vector{Symbol}()))
+    default_beam_length, PackedDiagramStrategy(
+        default_beam_margin, beam_X_lower),
+    nothing, 0, pvec(Vector{Symbol}()))
 end
 
 function quadratic_beam_specs(size::Real)
@@ -1155,10 +1163,6 @@ end
 
 function cutting_plan(beam::Beam, k::PlaneKey)
     return cutting_plan(beam, k, beam_dir(beam))
-end
-
-function cutting_plan(beam::Beam)
-    return cutting_plan(beam, beam.specs.cutting_plan_key)
 end
 
 function lx_point(v)
@@ -1758,10 +1762,16 @@ function group_by_specs(beams::Vector{Beam})
     return dst
 end
 
+function make_diagrams(strategy::PackedDiagramStrategy, beam_specs::BeamSpecs, beams::Vector{Beam})
+    return pack([cutting_plan(beam, strategy.cutting_plan_key) for beam in beams],
+    beam_specs.length, strategy.margin)
+end
+
+
 function pack_plans(grouped_beams::Dict{BeamSpecs, Vector{Beam}})
     dst = Dict{BeamSpecs, Vector{BeamLayout}}()
     for (beam_specs, beams) in grouped_beams
-        dst[beam_specs] = pack([cutting_plan(beam) for beam in beams], beam_specs.length, beam_specs.margin)
+        dst[beam_specs] = make_diagrams(beam_specs.diagram_strategy, beam_specs, beams)
     end
     return dst
 end
@@ -1792,6 +1802,17 @@ function title(specs::BeamSpecs)
 end
 
 abstract type DocNode end
+
+struct DocContext
+    dst_root::String
+    section_level::Integer
+end
+
+struct DocInit
+    dst_root::String
+    title::String
+    child::DocNode
+end
 
 struct DocGroup <: DocNode
     children::Vector{DocNode}
@@ -1838,6 +1859,73 @@ function annotation_table(annotations::Vector{DiagramAnnotation})
     return DocTable(header, rows)
 end
 
+struct HtmlRenderer
+    file
+end
+
+function write!(dst::HtmlRenderer, s::String)
+    write(dst.file, s)
+end
+
+function deeper(context::DocContext)
+    return @set context.section_level = context.section_level + 1
+end
+
+function render(node::DocGroup, context::DocContext, dst::HtmlRenderer)
+    for x in node.children
+        render(x, context, dst)
+    end
+end
+
+function cell_html(x)
+    return string(x)
+end
+
+function cell_html(x::Nothing)
+    return ""
+end
+
+function render_row(cell_type::String, row::TableRow, context::DocContext, dst::HtmlRenderer)
+    write!(dst, "<tr>")
+    for x in row.cells
+        write!(dst, string("<", cell_type, ">"))
+        write!(dst, cell_html(x))
+        write!(dst, string("</", cell_type, ">"))
+    end
+    write!(dst, "</tr>")
+end
+
+function render(node::DocImage, context::DocContext, dst::HtmlRenderer)
+    write!(dst, @sprintf("<img src='%s'></img>", node.filename))
+end
+
+function render(node::DocTable, context::DocContext, dst::HtmlRenderer)
+    write!(dst, "<table>")
+    render_row("th", node.header, context, dst)
+    for row in node.rows
+        render_row("td", row, context, dst)
+    end
+    write!(dst, "</table>")
+end
+
+function render(node::DocSection, context::DocContext, dst::HtmlRenderer)
+    hl = @sprintf("h%d", context.section_level + 1)
+    write!(dst, string("<", hl, ">", node.title, "</", hl, ">"))
+    render(node.child, deeper(context), dst)
+end
+
+style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collapse: collapse;}"
+
+function render_html(node::DocInit)
+    open(joinpath(node.dst_root, "index.html"), "w") do file
+        context = DocContext(node.dst_root, 0)
+        dst = HtmlRenderer(file)
+        write!(dst, string("<html><head><title>", title, "</title><style>", style, "</style></head><body>"))
+        render(node.child, context, dst)
+        write!(dst, "</body></html>")
+    end
+end
+
 function make(dst_root::String, report::Report)
     render_config = report.render_config
     render_config = @set render_config.preview = false
@@ -1872,7 +1960,7 @@ function make(dst_root::String, report::Report)
         end
         push!(doc, DocSection(title(beam_specs), DocGroup(specnodes)))
     end
-    return DocSection(report.project_name, DocGroup(doc))
+    return DocInit(dst_root, report.project_name, DocSection(report.project_name, DocGroup(doc)))
 end
 
 ######################## Samples code
@@ -1909,7 +1997,8 @@ function demo2()
     beam1 = transform(rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
 
     report = basic_report("Just a sketch", group([beam0, beam1]))
-    make("/tmp/demo2report", report)
+    doc = make("/tmp/demo2report", report)
+    render_html(doc)
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.
