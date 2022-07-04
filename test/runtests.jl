@@ -430,34 +430,6 @@ end
     @test 8 == length(A3.annotations[bp.beam_Y_upper])
 end
 
-@testset "Obj export test" begin
-    bp = Blueprint
-    bs = bp.beam_specs(1.0, 3.0)
-    beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
-
-    a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
-    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
-
-    beam = bp.cut(a, bp.cut(b, beam))
-
-    # Export wavefront obj
-    mesh = bp.mesh_from_physical_object(beam)
-    obj = bp.wavefront_obj_string(mesh)
-    @test occursin("f 1 3 5", obj)
-
-    
-    # k = :beam_X_lower
-    # @test haskey(beam.polyhedron.planes, k)
-
-    # plan = bp.cutting_plan(beam, k)
-
-    # @test bp.plan_width(plan) == 3.0
-    # @test bp.plan_length(plan) == 4.5
-
-    # @test 4 == length(plan.corners)
-
-end
-
 @testset "Cutting plan test" begin
     bp = Blueprint
     bs = bp.beam_specs(1.0, 3.0)

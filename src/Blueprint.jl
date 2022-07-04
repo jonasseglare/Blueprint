@@ -993,69 +993,6 @@ function compute_corner_loop(corners::Vector{PlaneKeyTuple2})::Vector{PlaneKeyTu
     end
 end
 
-struct Vertex
-    position::Vector{Float64}
-    color::RgbColor
-end
-
-Facet = Tuple{Integer, Integer, Integer}
-
-struct TriMesh
-    vertices::Vector{Vertex}
-    facets::Vector{Facet}
-end
-
-function mesh_from_physical_object(beam::Beam)
-    polyhedron = beam.polyhedron
-    vertex_count = length(polyhedron.corners)
-    vertices = Vector{Vertex}()
-    vertex_index_map = Dict{PlaneKeyTuple3, Integer}()
-
-    for (k, v) in polyhedron.corners
-        index = length(vertex_index_map)+1
-        vertex_index_map[k] = index
-        push!(vertices, Vertex(v, beam.specs.color))
-    end
-
-    facets = Vector{Facet}()
-    for (k, v) in polyhedron.planes
-        ks = plane_corner_keys(polyhedron, k)
-        loop = compute_corner_loop(ks)
-
-        function vind(i::Integer)
-            (a, b) = loop[i]
-            return vertex_index_map[ordered_triplet(k, a, b)]
-        end
-        
-        m = length(loop)
-        if 0 < m
-            for j in 2:(m-1)
-                facet = (vind(1), vind(j), vind(j+1))
-                (i0, i1, i2) = facet
-                (v0, v1, v2) = [vertices[i].position for i in facet]
-                normal = cross(v1 - v0, v2 - v0)
-                if dot(normal, v.normal) > 0
-                    facet = reverse(facet)
-                end
-                push!(facets, facet)
-            end
-        end
-    end
-    return TriMesh(vertices, facets)
-end
-
-function wavefront_obj_string(mesh::TriMesh)
-    buf = IOBuffer()
-    for v in mesh.vertices
-        (x, y, z) = v.position
-        println(buf, string("v ", x, " ", y, " ", z))
-    end
-    for (i, j, k) in mesh.facets
-        println(buf, string("f ", i, " ", j, " ", k))
-    end
-    return String(take!(buf))
-end
-
 struct CornerPosition
     key::PlaneKeyTuple3
     position::Vector{Float64}
@@ -2085,4 +2022,4 @@ end # module
 ## Call
 
 # ONLY FOR DEBUG
-#Blueprint.demo2()
+Blueprint.demo2()
