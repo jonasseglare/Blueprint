@@ -2,6 +2,8 @@
 
 ## Beam dims 1.000x3.000x6.000
 
+Diagrams for nodes with these dimensions.
+
 ### Layout 1/2
 
 

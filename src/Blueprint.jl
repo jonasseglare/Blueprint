@@ -1814,6 +1814,10 @@ struct DocInit
     child::DocNode
 end
 
+struct DocParagraph <: DocNode
+    text::String
+end
+
 struct DocGroup <: DocNode
     children::Vector{DocNode}
 end
@@ -1904,6 +1908,12 @@ function render_row(cell_type::String, row::TableRow, context::DocContext, dst::
     write!(dst, "</tr>")
 end
 
+function render(node::DocParagraph, context::DocContext, dst::HtmlRenderer)
+    write!(dst, "<p>")
+    write!(dst, node.text)
+    write!(dst, "</p>")
+end
+
 function render(node::DocImage, context::DocContext, dst::HtmlRenderer)
     write!(dst, @sprintf("<img src='%s'></img>", node.local_path))
 end
@@ -1956,6 +1966,11 @@ function render(node::DocTable, context::DocContext, dst::MarkdownRenderer)
     write!(dst, "\n\n")
 end
 
+function render(node::DocParagraph, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, node.text)
+    write!(dst, "\n\n")
+end
+
 function render(node::DocImage, context::DocContext, dst::MarkdownRenderer)
     write!(dst, @sprintf("![%s](%s)\n", node.local_path, node.local_path))
 end
@@ -2003,6 +2018,7 @@ function make(dst_root::String, report::Report)
 
     for (beam_specs, layouts) in sorted_layouts
         specnodes = Vector{DocNode}()
+        push!(specnodes, DocParagraph("Diagrams for nodes with these dimensions."))
 
         n = length(layouts)
         for (i, layout) in enumerate(layouts)
@@ -2059,7 +2075,7 @@ function demo2()
     report = basic_report("Just a sketch", group([beam0, beam1]))
     doc = make("../sample/demo2report", report)
     #render_html(doc)
-    render_markdown(doc)
+    render_markdown(doc) 
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.
