@@ -1814,6 +1814,10 @@ struct DocInit
     child::DocNode
 end
 
+struct DocParagraph <: DocNode
+    text::String
+end
+
 struct DocGroup <: DocNode
     children::Vector{DocNode}
 end
@@ -1824,7 +1828,8 @@ struct DocSection <: DocNode
 end
 
 struct DocImage <: DocNode
-    filename::String
+    local_path::String
+    full_path::String
 end
 
 struct TableRow
@@ -1903,8 +1908,14 @@ function render_row(cell_type::String, row::TableRow, context::DocContext, dst::
     write!(dst, "</tr>")
 end
 
+function render(node::DocParagraph, context::DocContext, dst::HtmlRenderer)
+    write!(dst, "<p>")
+    write!(dst, node.text)
+    write!(dst, "</p>")
+end
+
 function render(node::DocImage, context::DocContext, dst::HtmlRenderer)
-    write!(dst, @sprintf("<img src='%s'></img>", node.filename))
+    write!(dst, @sprintf("<img src='%s'></img>", node.local_path))
 end
 
 function render(node::DocTable, context::DocContext, dst::HtmlRenderer)
@@ -1955,8 +1966,13 @@ function render(node::DocTable, context::DocContext, dst::MarkdownRenderer)
     write!(dst, "\n\n")
 end
 
+function render(node::DocParagraph, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, node.text)
+    write!(dst, "\n\n")
+end
+
 function render(node::DocImage, context::DocContext, dst::MarkdownRenderer)
-    write!(dst, @sprintf("![%s](%s)\n", node.filename, node.filename))
+    write!(dst, @sprintf("![%s](%s)\n", node.local_path, node.local_path))
 end
 
 function render(node::DocSection, context::DocContext, dst::MarkdownRenderer)
@@ -2002,17 +2018,19 @@ function make(dst_root::String, report::Report)
 
     for (beam_specs, layouts) in sorted_layouts
         specnodes = Vector{DocNode}()
+        push!(specnodes, DocParagraph("Diagrams for nodes with these dimensions."))
 
         n = length(layouts)
         for (i, layout) in enumerate(layouts)
-            diagram_svg_name = joinpath(dst_root, @sprintf("diagram%03d.svg", diagram_counter))
+            local_name = @sprintf("diagram%03d.svg", diagram_counter)
+            diagram_svg_name = joinpath(dst_root, local_name)
             diagram_render_config = @set render_config.filename = diagram_svg_name
             
             annotations = render(layout, diagram_render_config)
             
             layout_nodes = Vector{DocNode}()
             push!(layout_nodes, annotation_table(annotations))
-            push!(layout_nodes, DocImage(diagram_svg_name))
+            push!(layout_nodes, DocImage(local_name, diagram_svg_name))
             push!(specnodes, DocSection(@sprintf("Layout %d/%d", i, n), DocGroup(layout_nodes)))
             diagram_counter += 1
         end
@@ -2057,7 +2075,7 @@ function demo2()
     report = basic_report("Just a sketch", group([beam0, beam1]))
     doc = make("../sample/demo2report", report)
     #render_html(doc)
-    render_markdown(doc)
+    render_markdown(doc) 
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.
@@ -2067,4 +2085,4 @@ end # module
 ## Call
 
 # ONLY FOR DEBUG
-Blueprint.demo2()
+#Blueprint.demo2()

@@ -654,3 +654,25 @@ end
     @test "c" == bp.numeric_string_in_base(base, 2)
     @test "ba" == bp.numeric_string_in_base(base, 3)
 end
+
+## Rendering
+@testset "Check that report rendering works" begin
+    bp = Blueprint
+    
+    bs = @set bp.beam_specs(1.0, 3.0).length = 6.0
+    
+    beam = bp.orient_beam(bp.new_beam(bs), [1.0, 0.0, 0.0], bp.local_y_dir)
+
+    a = bp.NamedPlane(:a, bp.plane_at_pos([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]))
+    b = bp.NamedPlane(:b, bp.plane_at_pos([-1.0, 0.0, 0.0], [4.5, 0.0, 0.0]))
+
+    beam0 = bp.cut(a, bp.cut(b, beam))
+    beam1 = bp.transform(bp.rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
+
+    report = bp.basic_report("Just a sketch", bp.group([beam0, beam1]))
+    
+    bp.render_html(bp.make("/tmp/html_demo2report", report))
+    @test isfile("/tmp/html_demo2report/index.html")
+    bp.render_markdown(bp.make("/tmp/html_demo2report", report))
+    @test isfile("/tmp/html_demo2report/README.md")
+end

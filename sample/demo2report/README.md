@@ -2,6 +2,8 @@
 
 ## Beam dims 1.000x3.000x6.000
 
+Diagrams for nodes with these dimensions.
+
 ### Layout 1/2
 
 
@@ -15,7 +17,7 @@
 | 0 | Overall length |  |  | 4.500 |
 
 
-![../sample/demo2report/diagram000.svg](../sample/demo2report/diagram000.svg)
+![diagram000.svg](diagram000.svg)
 ### Layout 2/2
 
 
@@ -29,4 +31,4 @@
 | 1 | Overall length |  |  | 4.500 |
 
 
-![../sample/demo2report/diagram001.svg](../sample/demo2report/diagram001.svg)
+![diagram001.svg](diagram001.svg)
