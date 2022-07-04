@@ -1657,6 +1657,7 @@ end
 abstract type ComponentVisitor end
 abstract type BeamVisitor <: ComponentVisitor end
 
+# Collect only beams that can be seen. Used for diagrams, etc.
 struct VisibleBeamCollector <: BeamVisitor
     beams::Vector{Beam}
 end
@@ -1668,7 +1669,7 @@ function visit(dst::VisibleBeamCollector, src::Beam)
     end
 end
 
-function visit(dst::BeamVisitor, src::Group)
+function visit(dst::ComponentVisitor, src::Group)
     for x in src.components
         visit(dst, x)
     end
@@ -1975,6 +1976,46 @@ function make(dst_root::String, report::Report)
     end
     return DocInit(dst_root, report.project_name, DocSection(report.project_name, DocGroup(doc)))
 end
+
+
+
+################# 3d model rendering
+
+struct MeshBuilder <: ComponentVisitor
+    vertices::Vector{Vector{Number}}
+    triangles::Vector{Vector{Integer}}
+end
+
+function add_vertex!(dst::MeshBuilder, vertex::Vector{Number})
+    index = length(dst.vertices)
+    push!(dst.vertices, vertex)
+    return index
+end
+
+function add_triangle!(dst::MeshBuilder, triangle::Vector{Integer})
+    @assert length(triangle) == 3
+    push!(dst.triangles, triangle)
+end
+
+
+function visit(dst::MeshBuilder, src::Beam)
+    polyhedron = src.polyhedron
+    for (plane_key, plane) in polyhedron.planes
+        corner_indices = Dict{PlaneKeyTuple3, Integer}()
+        for (corner, vertex) in polyhedron.corners
+            corner_indices[corner] = add_vertex!(dst, vertex)
+            
+            loop = [ordered_triplet(pair, plane_key) for pair in compute_corner_loop(plane_corner_keys(polyhedron, plane_key))]
+        end
+    end
+end
+    
+
+function mesh(component::AbstractComponent)
+    builder = MeshBuilder(builder)
+    visit(component, builder)
+end
+
 
 ######################## Samples code
 
