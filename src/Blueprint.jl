@@ -1863,7 +1863,15 @@ struct HtmlRenderer
     file
 end
 
+struct MarkdownRenderer
+    file
+end
+
 function write!(dst::HtmlRenderer, s::String)
+    write(dst.file, s)
+end
+
+function write!(dst::MarkdownRenderer, s::String)
     write(dst.file, s)
 end
 
@@ -1871,7 +1879,7 @@ function deeper(context::DocContext)
     return @set context.section_level = context.section_level + 1
 end
 
-function render(node::DocGroup, context::DocContext, dst::HtmlRenderer)
+function render(node::DocGroup, context::DocContext, dst)
     for x in node.children
         render(x, context, dst)
     end
@@ -1914,15 +1922,65 @@ function render(node::DocSection, context::DocContext, dst::HtmlRenderer)
     render(node.child, deeper(context), dst)
 end
 
+function cell_markdown(x)
+    return string(x)
+end
+
+function cell_markdown(x::Nothing)
+    return ""
+end
+
+
+function render_row(row::TableRow, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, "|")
+    for x in row.cells
+        write!(dst, " ")
+        write!(dst, cell_markdown(x))
+        write!(dst, " |")
+    end
+    write!(dst, "\n")
+end
+
+function markdown_header_bar(n)
+    return string("|", "-|"^n, "\n")
+end
+
+function render(node::DocTable, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, "\n")
+    render_row(node.header, context, dst)
+    write!(dst, markdown_header_bar(length(node.header.cells)))
+    for row in node.rows
+        render_row(row, context, dst)
+    end
+    write!(dst, "\n\n")
+end
+
+function render(node::DocImage, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, @sprintf("![%s](%s)\n", node.filename, node.filename))
+end
+
+function render(node::DocSection, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, string("#"^(context.section_level+1), " ", node.title, "\n\n"))
+    render(node.child, deeper(context), dst)
+end
+
 style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collapse: collapse;}"
 
 function render_html(node::DocInit)
     open(joinpath(node.dst_root, "index.html"), "w") do file
         context = DocContext(node.dst_root, 0)
         dst = HtmlRenderer(file)
-        write!(dst, string("<html><head><title>", title, "</title><style>", style, "</style></head><body>"))
+        write!(dst, string("<html><head><title>", node.title, "</title><style>", style, "</style></head><body>"))
         render(node.child, context, dst)
         write!(dst, "</body></html>")
+    end
+end
+
+function render_markdown(node::DocInit)
+    open(joinpath(node.dst_root, "README.md"), "w") do file
+        context = DocContext(node.dst_root, 0)
+        dst = MarkdownRenderer(file)
+        render(node.child, context, dst)
     end
 end
 
@@ -1997,15 +2055,16 @@ function demo2()
     beam1 = transform(rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
 
     report = basic_report("Just a sketch", group([beam0, beam1]))
-    doc = make("/tmp/demo2report", report)
-    render_html(doc)
+    doc = make("../sample/demo2report", report)
+    #render_html(doc)
+    render_markdown(doc)
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.
 
 end # module
 
-
+## Call
 
 # ONLY FOR DEBUG
 Blueprint.demo2()

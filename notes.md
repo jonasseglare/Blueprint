@@ -35,6 +35,7 @@ Task breakdown, cutting plans:
 * Render full report in Markdown
 * Render a 3d model for an AbstractComponent STEP format
 * Render a 3d model for an AbstractComponent in STL format (for online viewing)
+* Line projection of polyhedron faces in a small depth span, in order to make diagrams
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
 [How the @png macro works](https://juliagraphics.github.io/Luxor.jl/stable/tutorial/basictutorial/#What-you-need)
