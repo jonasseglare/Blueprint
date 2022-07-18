@@ -1770,6 +1770,11 @@ struct DocImage <: DocNode
     full_path::String
 end
 
+struct DocLink <: DocNode
+    title::String
+    target::String
+end
+
 struct TableRow
     cells::Vector{Any}
 end
@@ -1918,6 +1923,19 @@ function render(node::DocSection, context::DocContext, dst::MarkdownRenderer)
     render(node.child, deeper(context), dst)
 end
 
+function render(node::DocLink, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, string("[", node.title, "](", node.target, ")\n\n"))
+end
+
+function render(node::DocLink, context::DocContext, dst::HtmlRenderer)
+    write!(dst, string("<a href='", node.target, "'>", node.title, "</a>"))
+end
+
+struct DocLink <: DocNode
+    title::String
+    target::String
+end
+
 style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collapse: collapse;}"
 
 function render_html(node::DocInit)
@@ -1946,6 +1964,14 @@ function make(dst_root::String, report::Report)
     # Where images are rendered
     mkpath(dst_root)
     doc = Vector{DocNode}()
+
+    stl_name = "full_model.stl"
+    stl_path = joinpath(dst_root, stl_name)
+    mesh = make_mesh(report.top_component)
+    render_stl(stl_path, mesh)
+
+    model_link = DocLink("See the full model", stl_name)
+    push!(doc, model_link)
 
     diagram_counter = 0
     beams = get_beams(report.top_component)
@@ -2137,11 +2163,6 @@ function demo2()
     doc = make("../sample/demo2report", report)
     #render_html(doc)
     render_markdown(doc)
-
-    m = make_mesh(full_design)
-    render_stl("../sample/demo2report/full_design.stl", m)
-
-    @info "Done demo2" length(m.triangles) length(m.vertices)
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.

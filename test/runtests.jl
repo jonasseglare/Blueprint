@@ -640,11 +640,16 @@ end
 
     beam0 = bp.cut(a, bp.cut(b, beam))
     beam1 = bp.transform(bp.rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
-
-    report = bp.basic_report("Just a sketch", bp.group([beam0, beam1]))
+    full_design = bp.group([beam0, beam1])
+    report = bp.basic_report("Just a sketch", full_design)
     
     bp.render_html(bp.make("/tmp/html_demo2report", report))
     @test isfile("/tmp/html_demo2report/index.html")
     bp.render_markdown(bp.make("/tmp/html_demo2report", report))
     @test isfile("/tmp/html_demo2report/README.md")
+    @test isfile("/tmp/html_demo2report/full_model.stl")
+
+    m = bp.make_mesh(full_design)
+    @test 16 == length(m.vertices)
+    @test 24 == length(m.triangles)
 end
