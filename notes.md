@@ -33,8 +33,7 @@ Task breakdown, cutting plans:
 * ~~Return a table with the meaning of different annotations in the figure.~~
 * ~~Render full report in HTML~~
 * ~~Render full report in Markdown~~
-* Render a 3d model for an AbstractComponent STEP format
-* Render a 3d model for an AbstractComponent in STL format (for online viewing)
+* ~~Render a 3d model for an AbstractComponent in STL format (for online viewing)~~
 * Line projection of polyhedron faces in a small depth span, in order to make diagrams
 
 [About coordinates](https://juliagraphics.github.io/Luxor.jl/stable/explanation/basics/)
@@ -55,6 +54,7 @@ Task breakdown, cutting plans:
 
 More features to make it useful.
 
+* Set memberships for beams, components, etc: Render one mesh for each set.
 * Beam array
 * Drilling routines for groups
 * Miter cut

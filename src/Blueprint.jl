@@ -993,69 +993,6 @@ function compute_corner_loop(corners::Vector{PlaneKeyTuple2})::Vector{PlaneKeyTu
     end
 end
 
-struct Vertex
-    position::Vector{Float64}
-    color::RgbColor
-end
-
-Facet = Tuple{Integer, Integer, Integer}
-
-struct TriMesh
-    vertices::Vector{Vertex}
-    facets::Vector{Facet}
-end
-
-function mesh_from_physical_object(beam::Beam)
-    polyhedron = beam.polyhedron
-    vertex_count = length(polyhedron.corners)
-    vertices = Vector{Vertex}()
-    vertex_index_map = Dict{PlaneKeyTuple3, Integer}()
-
-    for (k, v) in polyhedron.corners
-        index = length(vertex_index_map)+1
-        vertex_index_map[k] = index
-        push!(vertices, Vertex(v, beam.specs.color))
-    end
-
-    facets = Vector{Facet}()
-    for (k, v) in polyhedron.planes
-        ks = plane_corner_keys(polyhedron, k)
-        loop = compute_corner_loop(ks)
-
-        function vind(i::Integer)
-            (a, b) = loop[i]
-            return vertex_index_map[ordered_triplet(k, a, b)]
-        end
-        
-        m = length(loop)
-        if 0 < m
-            for j in 2:(m-1)
-                facet = (vind(1), vind(j), vind(j+1))
-                (i0, i1, i2) = facet
-                (v0, v1, v2) = [vertices[i].position for i in facet]
-                normal = cross(v1 - v0, v2 - v0)
-                if dot(normal, v.normal) > 0
-                    facet = reverse(facet)
-                end
-                push!(facets, facet)
-            end
-        end
-    end
-    return TriMesh(vertices, facets)
-end
-
-function wavefront_obj_string(mesh::TriMesh)
-    buf = IOBuffer()
-    for v in mesh.vertices
-        (x, y, z) = v.position
-        println(buf, string("v ", x, " ", y, " ", z))
-    end
-    for (i, j, k) in mesh.facets
-        println(buf, string("f ", i, " ", j, " ", k))
-    end
-    return String(take!(buf))
-end
-
 struct CornerPosition
     key::PlaneKeyTuple3
     position::Vector{Float64}
@@ -1720,6 +1657,7 @@ end
 abstract type ComponentVisitor end
 abstract type BeamVisitor <: ComponentVisitor end
 
+# Collect only beams that can be seen. Used for diagrams, etc.
 struct VisibleBeamCollector <: BeamVisitor
     beams::Vector{Beam}
 end
@@ -1731,7 +1669,7 @@ function visit(dst::VisibleBeamCollector, src::Beam)
     end
 end
 
-function visit(dst::BeamVisitor, src::Group)
+function visit(dst::ComponentVisitor, src::Group)
     for x in src.components
         visit(dst, x)
     end
@@ -1830,6 +1768,11 @@ end
 struct DocImage <: DocNode
     local_path::String
     full_path::String
+end
+
+struct DocLink <: DocNode
+    title::String
+    target::String
 end
 
 struct TableRow
@@ -1980,6 +1923,19 @@ function render(node::DocSection, context::DocContext, dst::MarkdownRenderer)
     render(node.child, deeper(context), dst)
 end
 
+function render(node::DocLink, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, string("[", node.title, "](", node.target, ")\n\n"))
+end
+
+function render(node::DocLink, context::DocContext, dst::HtmlRenderer)
+    write!(dst, string("<a href='", node.target, "'>", node.title, "</a>"))
+end
+
+struct DocLink <: DocNode
+    title::String
+    target::String
+end
+
 style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collapse: collapse;}"
 
 function render_html(node::DocInit)
@@ -2009,6 +1965,14 @@ function make(dst_root::String, report::Report)
     mkpath(dst_root)
     doc = Vector{DocNode}()
 
+    stl_name = "full_model.stl"
+    stl_path = joinpath(dst_root, stl_name)
+    mesh = make_mesh(report.top_component)
+    render_stl(stl_path, mesh)
+
+    model_link = DocLink("See the full model", stl_name)
+    push!(doc, model_link)
+
     diagram_counter = 0
     beams = get_beams(report.top_component)
     groups = group_by_specs(beams)
@@ -2037,6 +2001,128 @@ function make(dst_root::String, report::Report)
         push!(doc, DocSection(title(beam_specs), DocGroup(specnodes)))
     end
     return DocInit(dst_root, report.project_name, DocSection(report.project_name, DocGroup(doc)))
+end
+
+
+
+################# 3d model rendering
+
+struct Triangle
+    vertex_indices::Vector{Integer}
+    normal::Vector{Number}
+end
+
+struct MeshBuilder <: ComponentVisitor
+    vertices::Vector{Vector{Number}}
+    triangles::Vector{Triangle}
+end
+
+function make_empty_meshbuilder()
+    return MeshBuilder(Vector{Vector{Number}}(), Vector{Vector{Integer}}())
+end
+
+struct Mesh
+    vertices::Vector{Vector{Number}}
+    triangles::Vector{Triangle}
+end
+
+# Returns the 0-based index!
+function add_vertex!(dst::MeshBuilder, vertex::Vector{Number})
+    index = length(dst.vertices)
+    push!(dst.vertices, vertex)
+    return index
+end
+
+function add_triangle!(dst::MeshBuilder, triangle::Triangle)
+    @assert length(triangle.vertex_indices) == 3
+    push!(dst.triangles, triangle)
+end
+
+
+function visit(src::Beam, dst::MeshBuilder)
+    polyhedron = src.polyhedron
+
+    # Visit all the corners of the polyhedron and save their positions and indices
+    corner_indices = Dict{PlaneKeyTuple3, Integer}()
+    for (corner, vertex) in polyhedron.corners
+        corner_indices[corner] = add_vertex!(dst, convert(Vector{Number}, vertex))
+    end
+    
+    # For every plane of the polyhedron
+    for (plane_key, plane) in polyhedron.planes
+
+        # Get a loop for that plane
+        loop = [ordered_triplet(pair, plane_key) for pair in compute_corner_loop(plane_corner_keys(polyhedron, plane_key))]
+        n = length(loop)
+        if 3 <= n
+            a = loop[1]
+            
+            f0 = corner_indices[a]
+            for i = 2:n-1
+                b = loop[i]
+                c = loop[i+1]
+
+                f1 = corner_indices[b]
+                f2 = corner_indices[c]
+
+                dx = polyhedron.corners[b] - polyhedron.corners[a]
+                dy = polyhedron.corners[c] - polyhedron.corners[a]
+
+
+                normal = normalize(-plane.normal)
+                inds = [f0, f1, f2]
+                if dot(cross(dx, dy), normal) < 0
+                    inds = [f0, f2, f1]
+                end
+                triangle = Triangle(inds, normal)
+                
+                add_triangle!(dst, triangle)
+            end
+        end
+    end
+end
+
+function visit(src::Group, dst::MeshBuilder)
+    for e in src.components
+        visit(e, dst)
+    end
+end
+
+function make_mesh(builder::MeshBuilder)
+    return Mesh(builder.vertices, builder.triangles)
+end
+
+function make_mesh(component::AbstractComponent)
+    builder = make_empty_meshbuilder()
+    visit(component, builder)
+    return make_mesh(builder)
+end
+
+function render_stl(filename::String, mesh::Mesh)
+    name = "the_design";
+    open(filename, "w") do file
+        write(file, string("solid ", name, "\n"))
+        for triangle in mesh.triangles
+            write(file, "facet normal")
+            for nx in triangle.normal
+                write(file, string(" ", nx))
+            end
+            write(file, "\n")
+            write(file, "    outer loop\n")
+            for i in triangle.vertex_indices
+                write(file, "        vertex")
+                vertex = mesh.vertices[i+1]
+                for x in vertex
+                    write(file, string(" ", x))
+                end
+                write(file, "\n")
+            end
+            write(file, "    endloop\n")
+            write(file, "endfacet\n")
+        end
+        write(file, string("endsolid ", name))
+        #write(io, "Hello world!")
+    end
 end
 
 ######################## Samples code
@@ -2071,11 +2157,12 @@ function demo2()
 
     beam0 = cut(a, cut(b, beam))
     beam1 = transform(rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
-
-    report = basic_report("Just a sketch", group([beam0, beam1]))
+    full_design = group([beam0, beam1])
+    
+    report = basic_report("Just a sketch", full_design)
     doc = make("../sample/demo2report", report)
     #render_html(doc)
-    render_markdown(doc) 
+    render_markdown(doc)
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.

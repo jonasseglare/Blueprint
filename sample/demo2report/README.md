@@ -1,5 +1,7 @@
 # Just a sketch
 
+[See the full model](full_model.stl)
+
 ## Beam dims 1.000x3.000x6.000
 
 Diagrams for nodes with these dimensions.
