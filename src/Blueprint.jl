@@ -1981,41 +1981,123 @@ end
 
 ################# 3d model rendering
 
-struct MeshBuilder <: ComponentVisitor
-    vertices::Vector{Vector{Number}}
-    triangles::Vector{Vector{Integer}}
+struct Triangle
+    vertex_indices::Vector{Integer}
+    normal::Vector{Number}
 end
 
+struct MeshBuilder <: ComponentVisitor
+    vertices::Vector{Vector{Number}}
+    triangles::Vector{Triangle}
+end
+
+function make_empty_meshbuilder()
+    return MeshBuilder(Vector{Vector{Number}}(), Vector{Vector{Integer}}())
+end
+
+struct Mesh
+    vertices::Vector{Vector{Number}}
+    triangles::Vector{Triangle}
+end
+
+# Returns the 0-based index!
 function add_vertex!(dst::MeshBuilder, vertex::Vector{Number})
     index = length(dst.vertices)
     push!(dst.vertices, vertex)
     return index
 end
 
-function add_triangle!(dst::MeshBuilder, triangle::Vector{Integer})
-    @assert length(triangle) == 3
+function add_triangle!(dst::MeshBuilder, triangle::Triangle)
+    @assert length(triangle.vertex_indices) == 3
     push!(dst.triangles, triangle)
 end
 
 
-function visit(dst::MeshBuilder, src::Beam)
+function visit(src::Beam, dst::MeshBuilder)
     polyhedron = src.polyhedron
+
+    # Visit all the corners of the polyhedron and save their positions and indices
+    corner_indices = Dict{PlaneKeyTuple3, Integer}()
+    for (corner, vertex) in polyhedron.corners
+        corner_indices[corner] = add_vertex!(dst, convert(Vector{Number}, vertex))
+    end
+    
+    # For every plane of the polyhedron
     for (plane_key, plane) in polyhedron.planes
-        corner_indices = Dict{PlaneKeyTuple3, Integer}()
-        for (corner, vertex) in polyhedron.corners
-            corner_indices[corner] = add_vertex!(dst, vertex)
+
+        # Get a loop for that plane
+        loop = [ordered_triplet(pair, plane_key) for pair in compute_corner_loop(plane_corner_keys(polyhedron, plane_key))]
+        n = length(loop)
+        if 3 <= n
+            a = loop[1]
             
-            loop = [ordered_triplet(pair, plane_key) for pair in compute_corner_loop(plane_corner_keys(polyhedron, plane_key))]
+            f0 = corner_indices[a]
+            for i = 2:n-1
+                b = loop[i]
+                c = loop[i+1]
+
+                f1 = corner_indices[b]
+                f2 = corner_indices[c]
+
+                dx = polyhedron.corners[b] - polyhedron.corners[a]
+                dy = polyhedron.corners[c] - polyhedron.corners[a]
+
+
+                normal = normalize(-plane.normal)
+                inds = [f0, f1, f2]
+                if dot(cross(dx, dy), normal) < 0
+                    inds = [f0, f2, f1]
+                end
+                triangle = Triangle(inds, normal)
+                
+                add_triangle!(dst, triangle)
+            end
         end
     end
 end
-    
 
-function mesh(component::AbstractComponent)
-    builder = MeshBuilder(builder)
-    visit(component, builder)
+function visit(src::Group, dst::MeshBuilder)
+    for e in src.components
+        visit(e, dst)
+    end
 end
 
+function make_mesh(builder::MeshBuilder)
+    return Mesh(builder.vertices, builder.triangles)
+end
+
+function make_mesh(component::AbstractComponent)
+    builder = make_empty_meshbuilder()
+    visit(component, builder)
+    return make_mesh(builder)
+end
+
+function render_stl(filename::String, mesh::Mesh)
+    name = "the_design";
+    open(filename, "w") do file
+        write(file, string("solid ", name, "\n"))
+        for triangle in mesh.triangles
+            write(file, "facet normal")
+            for nx in triangle.normal
+                write(file, string(" ", nx))
+            end
+            write(file, "\n")
+            write(file, "    outer loop\n")
+            for i in triangle.vertex_indices
+                write(file, "        vertex")
+                vertex = mesh.vertices[i+1]
+                for x in vertex
+                    write(file, string(" ", x))
+                end
+                write(file, "\n")
+            end
+            write(file, "    endloop\n")
+            write(file, "endfacet\n")
+        end
+        write(file, string("endsolid ", name))
+        #write(io, "Hello world!")
+    end
+end
 
 ######################## Samples code
 
@@ -2049,11 +2131,17 @@ function demo2()
 
     beam0 = cut(a, cut(b, beam))
     beam1 = transform(rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
-
-    report = basic_report("Just a sketch", group([beam0, beam1]))
+    full_design = group([beam0, beam1])
+    
+    report = basic_report("Just a sketch", full_design)
     doc = make("../sample/demo2report", report)
     #render_html(doc)
-    render_markdown(doc) 
+    render_markdown(doc)
+
+    m = make_mesh(full_design)
+    render_stl("../sample/demo2report/full_design.stl", m)
+
+    @info "Done demo2" length(m.triangles) length(m.vertices)
 end
 
 #export demo # Load the module and call Blueprint.demo() in the REPL.
@@ -2063,4 +2151,4 @@ end # module
 ## Call
 
 # ONLY FOR DEBUG
-Blueprint.demo2()
+#Blueprint.demo2()
