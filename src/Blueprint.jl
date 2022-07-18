@@ -1744,6 +1744,7 @@ abstract type DocNode end
 struct DocContext
     dst_root::String
     section_level::Integer
+    layout::Symbol
 end
 
 struct DocInit
@@ -1924,7 +1925,10 @@ function render(node::DocSection, context::DocContext, dst::MarkdownRenderer)
 end
 
 function render(node::DocLink, context::DocContext, dst::MarkdownRenderer)
-    write!(dst, string("[", node.title, "](", node.target, ")\n\n"))
+    write!(dst, string("[", node.title, "](", node.target, ")"))
+    if context.layout == :block # otherwise :inline
+        write!(dst, "\n\n")
+    end
 end
 
 function render(node::DocLink, context::DocContext, dst::HtmlRenderer)
@@ -1940,7 +1944,7 @@ style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collaps
 
 function render_html(node::DocInit)
     open(joinpath(node.dst_root, "index.html"), "w") do file
-        context = DocContext(node.dst_root, 0)
+        context = DocContext(node.dst_root, 0, :block)
         dst = HtmlRenderer(file)
         write!(dst, string("<html><head><title>", node.title, "</title><style>", style, "</style></head><body>"))
         render(node.child, context, dst)
@@ -1950,7 +1954,7 @@ end
 
 function render_markdown(node::DocInit)
     open(joinpath(node.dst_root, "README.md"), "w") do file
-        context = DocContext(node.dst_root, 0)
+        context = DocContext(node.dst_root, 0, :block)
         dst = MarkdownRenderer(file)
         render(node.child, context, dst)
     end
