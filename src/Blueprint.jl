@@ -29,6 +29,10 @@ function inside_interval(x, interval::DefinedInterval{T}) where {T}
     return interval.lower <= x && x < interval.upper
 end
 
+function interval_center(interval::DefinedInterval{T}) where {T}
+    return 0.5*(interval.lower + interval.upper)
+end
+
 function width(interval::DefinedInterval{T}) where {T}
     return interval.upper - interval.lower
 end
@@ -1128,9 +1132,11 @@ struct RenderConfig
     filename::String
     preview::Bool
     offset::Float64
+    projected_view_width::Float64
+    projected_view_height::Float64
 end
 
-const default_render_config = RenderConfig(12, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5)
+const default_render_config = RenderConfig(12, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5, 400, 300)
 
 struct LineKM{T}
     k::T
@@ -2202,8 +2208,8 @@ end
 abstract type ProjectedComponent end
 
 struct ProjectedBeam <: ProjectedComponent
-    plane_keys::Vector{PlaneKey}
-    image_bbox::BBox{Float64}
+    plane_keys::Set{PlaneKey}
+    bbox::BBox{Float64}
     contextual_beam::ContextualBeam
 end
 
@@ -2234,13 +2240,6 @@ function project(
         end
     end
     planes_to_keep = Set([plane_key for (plane_key, plane) in beam.polyhedron.planes if !(plane_key in planes_to_exclude)])
-
-#     struct Annotation
-#     position::Vector{Float64}
-#     label::Label
-#     data::AnnotationData
-# end
-
     annotations = Vector{Annotation}()
     projections = Vector{Vector{Float64}}()
     for plane in planes_to_keep
@@ -2254,7 +2253,7 @@ function project(
         end
     end
     bbox = compute_bbox(projections)
-    @info "Some info here" bbox planes_to_keep
+    push!(dst, ProjectedBeam(planes_to_keep, bbox, @set cbeam.component = beam))
 end
 
 function render_projected_view(view::ProjectedView, component::AbstractComponent, render_config::RenderConfig)
@@ -2271,42 +2270,47 @@ function render_projected_view(view::ProjectedView, component::AbstractComponent
 
     components = flatten(component)
 
-    dst = Vector{ProjectedComponent}()
+    projected_components = Vector{ProjectedComponent}()
     for contextual_component in components
-        project(view, RT, contextual_component, dst)
+        project(view, RT, contextual_component, projected_components)
+    end
+
+    bbox = compute_bbox([x.bbox for x in projected_components])
+    margin = render_config.margin
+
+    x_interval = bbox.intervals[1]
+    y_interval = bbox.intervals[2]
+
+    src_width = width(x_interval)
+    src_height = width(y_interval)
+
+    scale = min(render_config.projected_view_width/src_width, render_config.projected_view_height/src_height)
+
+    proj_width = scale*src_width
+    proj_height = scale*src_height
+
+    x_line = LineKM{Float64}(scale, margin - scale*x_interval.lower)
+    y_line = LineKM{Float64}(scale, margin - scale*y_interval.lower)
+
+    output_width = 2*margin + proj_width
+    output_height = 2*margin + proj_height
+
+    function pt(xy)
+        x = xy[1]
+        y = xy[2]
+        return lx.Point(x_line(x), y_line(y))
     end
     
+    offset = render_config.offset
+    lx.Drawing(output_width, output_height, render_config.filename)
+    lx.fontsize(render_config.fontsize)
+    lx.setdash("solid")
+
+    lx.finish()
+    if render_config.preview
+        lx.preview()
+    end
     
-    #annotations = Vector{DiagramAnnotation}()
-    #box = bbox(layout)
-    # margin = render_config.margin
-    
-    # hinterval = box.intervals[1]
-    # vinterval = box.intervals[2]
-    
-    # layout_width = width(hinterval)
-    # layout_height = width(vinterval)
-    # xf = compression_function(layout, layout_height)
-    # scale = render_config.output_beam_height/layout_height
-
-    # compressed_width = xf(hinterval.upper) - xf(hinterval.lower)
-
-    # output_width = 2*margin + scale*compressed_width
-    # output_height = 2*margin + scale*layout_height
-
-    # x_line = fit_line(xf(hinterval.lower), xf(hinterval.upper), render_config.margin, render_config.margin + scale*compressed_width)
-    # y_line = fit_line(vinterval.lower, vinterval.upper, render_config.margin, render_config.margin + scale*layout_height)
-
-    # function pt(xy)
-    #     (x, y) = xy
-    #     return lx.Point(x_line(xf(x)), y_line(y))
-    # end
-
-    # offset = render_config.offset
-    # lx.Drawing(output_width, output_height, render_config.filename)
-    # lx.fontsize(render_config.fontsize)
-    # lx.setdash("solid")
-
     # corner_count = 0
     # annotation_count = 0
 
@@ -2342,10 +2346,7 @@ function render_projected_view(view::ProjectedView, component::AbstractComponent
     #     end
     # end
     
-    # lx.finish()
-    # if render_config.preview
-    #     lx.preview()
-    # end
+
 end
 
 
