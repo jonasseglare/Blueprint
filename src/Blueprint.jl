@@ -1074,6 +1074,10 @@ function transform(rt::RigidTransform{Float64}, plan::BeamCuttingPlan)
     plan.beam_index)
 end
 
+function compute_corner_loop_keys(polyhedron::Polyhedron, k::PlaneKey)
+    return [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(polyhedron, k))]
+end
+
 function cutting_plan(
     # The beam for which to generate a plane
     cbeam::ContextualBeam,
@@ -1104,7 +1108,7 @@ function cutting_plan(
     world_local = RigidTransform(basis, cog)
     local_world = invert(world_local)
 
-    loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
+    loop = compute_corner_loop_keys(beam.polyhedron, k)
     @assert 0 < length(loop)
 
     function localize(X)
@@ -1505,8 +1509,8 @@ function char_range(lower::Char, upper::Char)
     return [Char(i) for i in Int(lower):Int(upper)]
 end
 
-corner_digits = char_range('a', 'z')
-annotation_digits = char_range('A', 'Z')
+const corner_digits = char_range('a', 'z')
+const annotation_digits = char_range('A', 'Z')
 
 function hor(lower, n)
     return lower:(lower + n - 1)
@@ -2127,7 +2131,7 @@ function visit(src::Beam, dst::MeshBuilder)
     for (plane_key, plane) in polyhedron.planes
 
         # Get a loop for that plane
-        loop = [ordered_triplet(pair, plane_key) for pair in compute_corner_loop(plane_corner_keys(polyhedron, plane_key))]
+        loop = compute_corner_loop_keys(polyhedron, plane_key)
         n = length(loop)
         if 3 <= n
             a = loop[1]
@@ -2256,6 +2260,27 @@ function project(
     push!(dst, ProjectedBeam(planes_to_keep, bbox, @set cbeam.component = beam))
 end
 
+
+function render_projected_component(pt, pc::ProjectedBeam, render_config::RenderConfig)
+    cbeam = pc.contextual_beam
+    beam = cbeam.component
+    polyhedron = beam.polyhedron
+    all_positions = Vector{lx.Point}()
+    for plane_key in pc.plane_keys
+        loop = compute_corner_loop_keys(polyhedron, plane_key)
+        positions = [pt(polyhedron.corners[corner_key]) for corner_key in loop]
+        lx.poly(positions, :stroke, close=true)
+        for x in positions
+            push!(all_positions, x)
+        end
+    end
+    apos = [pt(annotation.position) for annotation in beam.annotations]
+    lx.circle.(apos, render_config.marker_size, :fill)
+    lower_right = argmax(pos -> pos.x + pos.y, all_positions)
+    lx.label(string(cbeam.index), :SE, lower_right, offset=render_config.offset)
+    
+end
+
 function render_projected_view(view::ProjectedView, component::AbstractComponent, render_config::RenderConfig)
     z_axis = normalize(view.plane.normal)
     x_axis = normalize(view.diagram_x_vec - dot(z_axis, view.diagram_x_vec)*z_axis)
@@ -2306,47 +2331,14 @@ function render_projected_view(view::ProjectedView, component::AbstractComponent
     lx.fontsize(render_config.fontsize)
     lx.setdash("solid")
 
+    for pc in projected_components
+        render_projected_component(pt, pc, render_config)
+    end
+
     lx.finish()
     if render_config.preview
         lx.preview()
     end
-    
-    # corner_count = 0
-    # annotation_count = 0
-
-    # for plan in layout.plans
-    #     sub_annotations = Vector{DiagramAnnotation}()
-    #     positions = [pt(corner.position) for corner in plan.corners]
-    #     mid = average(positions)
-    #     lx.poly(positions, :stroke, close=true)
-    #     corner_labels = list_annotation_labels(plan.beam_index, corner_digits, hor(corner_count, length(plan.corners)))
-
-    #     for (label, corner) in zip(corner_labels, plan.corners)
-    #         push!(sub_annotations, DiagramPoint(label, corner.position))
-    #     end
-    #     push!(sub_annotations, DiagramDistance(AnnotationLabel(
-    #         plan.beam_index, "Overall length"), width(plan.bbox.intervals[1])))
-    #     push!(sub_annotations, DiagramDistance(AnnotationLabel(
-    #         plan.beam_index, "Overall height"), width(plan.bbox.intervals[2])))
-        
-    #     annotation_labels = list_annotation_labels(plan.beam_index, annotation_digits, hor(annotation_count, length(plan.annotations)))
-    #     slopes = corner_label_orientation.(mid, positions)
-    #     lx.label.([short_string(label) for label in corner_labels], slopes, positions, offset=offset)
-    #     apos = [pt(annotation.position) for annotation in plan.annotations]
-    #     lx.circle.(apos, render_config.marker_size, :fill)
-    #     lx.label.([short_string(label) for label in annotation_labels], :SE, apos, offset=offset)
-
-    #     lx.label(string(plan.beam_index), :SE, mid, offset=offset)
-        
-    #     corner_count += length(plan.corners)
-    #     annotation_count += length(plan.annotations)
-
-    #     for annot in sort(sub_annotations, by=annotation_order)
-    #         push!(annotations, annot)
-    #     end
-    # end
-    
-
 end
 
 
@@ -2391,10 +2383,8 @@ function demo2()
     diagram_x_vec = beam_dir(beam0)
 
     view = ProjectedView("From top", plane, diagram_x_vec, DefinedInterval{Float64}(-0.1, 0.1))
-    render_projected_view(view, full_design, default_render_config)
+    render_projected_view(view, full_design, @set default_render_config.preview = true)
 
-    @info "Stuff" plane diagram_x_vec
-    
     report = basic_report("Just a sketch", full_design, [view])
     doc = make("../sample/demo2report", report)
     #render_html(doc)
