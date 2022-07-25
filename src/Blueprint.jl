@@ -25,6 +25,10 @@ struct DefinedInterval{T}
     upper::T
 end
 
+function inside_interval(x, interval::DefinedInterval{T}) where {T}
+    return interval.lower <= x && x < interval.upper
+end
+
 function width(interval::DefinedInterval{T}) where {T}
     return interval.upper - interval.lower
 end
@@ -2188,8 +2192,91 @@ function render_stl(filename::String, mesh::Mesh)
 end
 
 
+# struct ProjectedView
+#     label::String
+#     plane::Plane{Float64}
+#     diagram_x_vec::Vector{Float64}
+#     z_range::Interval{Float64}
+# end
+
+abstract type ProjectedComponent end
+
+struct ProjectedBeam <: ProjectedComponent
+    plane_keys::Vector{PlaneKey}
+    image_bbox::BBox{Float64}
+    contextual_beam::ContextualBeam
+end
+
+
+function corner_part_of_planes(corner_key::PlaneKeyTuple3, planes_to_keep::Set{PlaneKey})
+    for x in corner_key
+        if x in planes_to_keep
+            return true
+        end
+    end
+    return false
+end
+
+function project(
+    view::ProjectedView, RT::RigidTransform{Float64},
+    cbeam::ContextualBeam, dst::Vector{ProjectedComponent})
+    beam = transform(RT, cbeam.component)
+
+    planes_to_exclude = Set{PlaneKey}()
+    if is_defined(view.z_range)
+        z_range = view.z_range::Interval{Float64}
+        for (corner_key, corner) in beam.polyhedron.corners
+            if !(inside_interval(corner[3], z_range))
+                for plane_key in corner_key
+                    push!(planes_to_exclude, plane_key)
+                end
+            end
+        end
+    end
+    planes_to_keep = Set([plane_key for (plane_key, plane) in beam.polyhedron.planes if !(plane_key in planes_to_exclude)])
+
+#     struct Annotation
+#     position::Vector{Float64}
+#     label::Label
+#     data::AnnotationData
+# end
+
+    annotations = Vector{Annotation}()
+    projections = Vector{Vector{Float64}}()
+    for plane in planes_to_keep
+        for annotation in get(beam.annotations, plane, [])
+            push!(projections, annotation.position)
+        end
+    end
+    for (corner_key, corner) in beam.polyhedron.corners
+        if corner_part_of_planes(corner_key, planes_to_keep)
+            push!(projections, corner)
+        end
+    end
+    bbox = compute_bbox(projections)
+    @info "Some info here" bbox planes_to_keep
+end
 
 function render_projected_view(view::ProjectedView, component::AbstractComponent, render_config::RenderConfig)
+    z_axis = normalize(view.plane.normal)
+    x_axis = normalize(view.diagram_x_vec - dot(z_axis, view.diagram_x_vec)*z_axis)
+    y_axis = cross(z_axis, x_axis)
+
+    refpos = pos_in_plane(view.plane)
+
+    R = [x_axis'; y_axis'; z_axis']
+    T = -R*refpos
+
+    RT = RigidTransform{Float64}(R, T)
+
+    components = flatten(component)
+
+    dst = Vector{ProjectedComponent}()
+    for contextual_component in components
+        project(view, RT, contextual_component, dst)
+    end
+    
+    
     #annotations = Vector{DiagramAnnotation}()
     #box = bbox(layout)
     # margin = render_config.margin
