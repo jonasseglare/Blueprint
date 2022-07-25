@@ -454,7 +454,7 @@ end
     cut_planes = bp.generate_drilling_planes(bp.mid_point(beam), a.plane, b.plane, dpspecs)
     drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes, bp.DrillSpecs(0))
 
-    beam = bp.drill(beam, drills)
+    beam = bp.ContextualBeam(bp.drill(beam, drills), -1, PersistentSet{Any}())
     
 
     # Make a plan for that plane
@@ -641,7 +641,7 @@ end
     beam0 = bp.cut(a, bp.cut(b, beam))
     beam1 = bp.transform(bp.rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
     full_design = bp.group([beam0, beam1])
-    report = bp.basic_report("Just a sketch", full_design)
+    report = bp.basic_report("Just a sketch", full_design, Vector{bp.ProjectedView}())
     
     bp.render_html(bp.make("/tmp/html_demo2report", report))
     @test isfile("/tmp/html_demo2report/index.html")

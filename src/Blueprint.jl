@@ -637,8 +637,17 @@ struct Beam <: AbstractComponent
     specs::BeamSpecs
     polyhedron::Polyhedron
     annotations::AbstractDict{PlaneKey, PersistentVector{Annotation}}
-    index::Integer
 end
+
+abstract type AbstractContextualComponent end
+
+struct ContextualComponent{T} <: AbstractContextualComponent
+    component::T
+    index::Integer
+    memberships::PersistentSet{Any}
+end
+
+const ContextualBeam = ContextualComponent{Beam}
 
 function new_beam(beam_specs::BeamSpecs)
     xlow = plane_at_dim(1, 0.0)
@@ -649,7 +658,7 @@ function new_beam(beam_specs::BeamSpecs)
                                 beam_X_upper => flip(plane_at_dim(1, beam_specs.Xsize)),
                                 beam_Y_lower => ylow,
                                 beam_Y_upper => flip(plane_at_dim(2, beam_specs.Ysize)))),
-                Dict{PlaneKey, PersistentVector{Annotation}}(), -1)
+                Dict{PlaneKey, PersistentVector{Annotation}}())
 end
 
 function has_corners(beam::Beam)
@@ -701,7 +710,7 @@ function transform(rigid_transform::RigidTransform{Float64}, beam::Beam)
     return Beam(compose(rigid_transform, beam.transform),
     beam.specs,
     transform(rigid_transform, beam.polyhedron),
-    transform(rigid_transform, beam.annotations), beam.index)
+    transform(rigid_transform, beam.annotations))
 end
 
 function set_transform(beam::Beam, new_transform::RigidTransform{Float64})
@@ -745,9 +754,16 @@ function min_projection(plane::Plane{Float64}, component::AbstractComponent)
 end
 
 function push_against(plane::Plane{Float64}, component::AbstractComponent)
+    plane = normalize_plane(plane)
     shift = min_projection(plane, component)
     translation = rigid_transform_from_translation(-shift*plane.normal)
     return transform(translation, component)
+end
+
+function get_tangent_plane(component::AbstractComponent, normal::Vector{Float64})
+    plane = plane_at_pos(normalize(normal), [0.0, 0.0, 0.0])
+    shift = min_projection(plane, component)
+    return translate(plane, shift)
 end
 
 struct NamedPlane
@@ -1024,7 +1040,6 @@ struct BeamCuttingPlan <: AbstractCuttingPlan
     # The bounding box
     bbox::BBox{Float64}
 
-    # Unique index of the beam that it belongs to
     beam_index::Integer
 end
 
@@ -1053,7 +1068,7 @@ end
 
 function cutting_plan(
     # The beam for which to generate a plane
-    beam::Beam,
+    cbeam::ContextualBeam,
 
     # The plane for the plan
     k::PlaneKey,
@@ -1061,15 +1076,12 @@ function cutting_plan(
     # The direction of the beam
     specified_beam_dir::Vector{Float64})
 
-
-
-
-    
+    beam = cbeam.component
 
     # The normal of the plane is pointing inward.
     # Flip it so that it points outwards.
     z = normalize(beam.polyhedron.planes[k].normal)
-    
+
     y = cross(z, specified_beam_dir)
     @assert 0 < norm(y)
     y = normalize(y)
@@ -1084,8 +1096,6 @@ function cutting_plan(
     world_local = RigidTransform(basis, cog)
     local_world = invert(world_local)
 
-    
-
     loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
     @assert 0 < length(loop)
 
@@ -1095,11 +1105,11 @@ function cutting_plan(
     
     corners = [CornerPosition(corner, localize(beam.polyhedron.corners[corner])) for corner in loop]
     annotations = [@set annotation.position = localize(annotation.position) for annotation in get(beam.annotations, k, PersistentVector{Annotation}())]
-    return beam_cutting_plan(k, beam.specs.flip_symmetric, corners, annotations, beam.index)
+    return beam_cutting_plan(k, beam.specs.flip_symmetric, corners, annotations, cbeam.index)
 end
 
-function cutting_plan(beam::Beam, k::PlaneKey)
-    return cutting_plan(beam, k, beam_dir(beam))
+function cutting_plan(beam::ContextualBeam, k::PlaneKey)
+    return cutting_plan(beam, k, beam_dir(beam.component))
 end
 
 function lx_point(v)
@@ -1605,8 +1615,11 @@ end
 ### More components
 
 struct Group <: AbstractComponent
+    memberships::Set{Any}
     components::Vector{AbstractComponent}
 end
+
+
 
 function group_sub!(dst, src::Group)
     for x in src.components
@@ -1633,7 +1646,11 @@ end
 function group(components...)
     dst = Vector{AbstractComponent}()
     group_sub!(dst, components)
-    return Group(dst)
+    return Group(Set{Any}(), dst)
+end
+
+function in_sets(component::AbstractComponent, sets...)
+    return Group(PersistentSet{Any}(sets), Vector{AbstractComponent}([component]))
 end
 
 # Operations on groups
@@ -1654,31 +1671,58 @@ end
 
 ### Pushing the beams
 
-abstract type ComponentVisitor end
-abstract type BeamVisitor <: ComponentVisitor end
-
-# Collect only beams that can be seen. Used for diagrams, etc.
-struct VisibleBeamCollector <: BeamVisitor
-    beams::Vector{Beam}
+struct FlattenContext
+    memberships::PersistentSet{Any}
 end
 
-function visit(dst::VisibleBeamCollector, src::Beam)
-    if has_corners(src)
-        index = length(dst.beams)
-        push!(dst.beams, @set src.index = index)
+function flatten(context::FlattenContext, group::Group, dst::Vector{AbstractContextualComponent})
+    inner_context = FlattenContext(pset())
+    for x in group.components
+        flatten(inner_context, x, dst)
     end
 end
 
-function visit(dst::ComponentVisitor, src::Group)
-    for x in src.components
-        visit(dst, x)
-    end
+function flatten(context::FlattenContext, beam::Beam, dst::Vector{AbstractContextualComponent})
+    index = length(dst)
+    push!(dst, ContextualComponent{Beam}(beam, index, context.memberships))
 end
+
+function flatten(component::AbstractComponent)
+    dst = Vector{AbstractContextualComponent}()
+    flatten(FlattenContext(pset()), component, dst)
+    return dst
+end
+
+# abstract type ComponentVisitor end
+# #abstract type BeamVisitor <: ComponentVisitor end
+
+# # Collect only beams that can be seen. Used for diagrams, etc.
+# struct VisibleBeamCollector <: ComponentVisitor
+#     beams::Vector{Beam}
+# end
+
+# function visit(dst::VisibleBeamCollector, src::Beam)
+#     if has_corners(src)
+#         index = length(dst.beams)
+#         push!(dst.beams, @set src.index = index)
+#     end
+# end
+
+# function visit(dst::ComponentVisitor, src::Group)
+#     for x in src.components
+#         visit(dst, x)
+#     end
+# end
 
 function get_beams(src::AbstractComponent)
-    dst = VisibleBeamCollector(Vector{Beam}())
-    visit(dst, src)
-    return dst.beams
+    components = flatten(src)
+    dst = Vector{ContextualBeam}()
+    for x in components
+        if typeof(x.component) == Beam && has_corners(x.component)
+            push!(dst, x)
+        end
+    end
+    return dst
 end
 
 function cutting_plan_grouping_key(specs::BeamSpecs)
@@ -1688,28 +1732,29 @@ function cutting_plan_grouping_key(specs::BeamSpecs)
     return specs
 end
 
-function group_by_specs(beams::Vector{Beam})
-    dst = Dict{BeamSpecs, Vector{Beam}}()
-    for beam in beams
+function group_by_specs(beams::Vector{ContextualComponent{Beam}})
+    dst = Dict{BeamSpecs, Vector{ContextualBeam}}()
+    for cc in beams
+        beam = cc.component
         k = cutting_plan_grouping_key(beam.specs)
         if !(haskey(dst, k))
-            dst[k] = Vector{Beam}()
+            dst[k] = Vector{ContextualBeam}()
         end
-        push!(dst[k], beam)
+        push!(dst[k], cc)
     end
     return dst
 end
 
-function make_diagrams(strategy::PackedDiagramStrategy, beam_specs::BeamSpecs, beams::Vector{Beam})
-    return pack([cutting_plan(beam, strategy.cutting_plan_key) for beam in beams],
+function make_diagrams(strategy::PackedDiagramStrategy, beam_specs::BeamSpecs, cbeams::Vector{ContextualBeam})
+    return pack([cutting_plan(cbeam, strategy.cutting_plan_key) for cbeam in cbeams],
     beam_specs.length, strategy.margin)
 end
 
 
-function pack_plans(grouped_beams::Dict{BeamSpecs, Vector{Beam}})
+function pack_plans(grouped_beams::Dict{BeamSpecs, Vector{ContextualBeam}})
     dst = Dict{BeamSpecs, Vector{BeamLayout}}()
-    for (beam_specs, beams) in grouped_beams
-        dst[beam_specs] = make_diagrams(beam_specs.diagram_strategy, beam_specs, beams)
+    for (beam_specs, contextual_beams) in grouped_beams
+        dst[beam_specs] = make_diagrams(beam_specs.diagram_strategy, beam_specs, contextual_beams)
     end
     return dst
 end
@@ -1721,14 +1766,31 @@ function numeric_string_in_base(base_digits::Vector{Char}, number::Integer)
     return string(next_str, base_digits[1 + mod(number, n)])
 end
 
+
+
+
+
+################ Local diagram rendering
+
+struct ProjectedView
+    label::String
+    plane::Plane{Float64}
+    diagram_x_vec::Vector{Float64}
+    z_range::Interval{Float64}
+end
+
+
+
+################# Report
 struct Report
     project_name::String
     top_component::AbstractComponent
+    views::Vector{ProjectedView}
     render_config::RenderConfig
 end
 
-function basic_report(project_name::String, top_component::AbstractComponent)
-    return Report(project_name, top_component, default_render_config)
+function basic_report(project_name::String, top_component::AbstractComponent, views::Vector{ProjectedView})
+    return Report(project_name, top_component, views, default_render_config)
 end
 
 function layout_order(pair::Tuple{BeamSpecs, Vector{BeamLayout}})
@@ -2008,7 +2070,6 @@ function make(dst_root::String, report::Report)
 end
 
 
-
 ################# 3d model rendering
 
 struct Triangle
@@ -2016,7 +2077,7 @@ struct Triangle
     normal::Vector{Number}
 end
 
-struct MeshBuilder <: ComponentVisitor
+struct MeshBuilder
     vertices::Vector{Vector{Number}}
     triangles::Vector{Triangle}
 end
@@ -2086,19 +2147,16 @@ function visit(src::Beam, dst::MeshBuilder)
     end
 end
 
-function visit(src::Group, dst::MeshBuilder)
-    for e in src.components
-        visit(e, dst)
-    end
-end
-
 function make_mesh(builder::MeshBuilder)
     return Mesh(builder.vertices, builder.triangles)
 end
 
 function make_mesh(component::AbstractComponent)
     builder = make_empty_meshbuilder()
-    visit(component, builder)
+    contextual_components = flatten(component)
+    for cc in contextual_components
+        visit(cc.component, builder)
+    end
     return make_mesh(builder)
 end
 
@@ -2128,6 +2186,84 @@ function render_stl(filename::String, mesh::Mesh)
         #write(io, "Hello world!")
     end
 end
+
+
+
+function render_projected_view(view::ProjectedView, component::AbstractComponent, render_config::RenderConfig)
+    #annotations = Vector{DiagramAnnotation}()
+    #box = bbox(layout)
+    # margin = render_config.margin
+    
+    # hinterval = box.intervals[1]
+    # vinterval = box.intervals[2]
+    
+    # layout_width = width(hinterval)
+    # layout_height = width(vinterval)
+    # xf = compression_function(layout, layout_height)
+    # scale = render_config.output_beam_height/layout_height
+
+    # compressed_width = xf(hinterval.upper) - xf(hinterval.lower)
+
+    # output_width = 2*margin + scale*compressed_width
+    # output_height = 2*margin + scale*layout_height
+
+    # x_line = fit_line(xf(hinterval.lower), xf(hinterval.upper), render_config.margin, render_config.margin + scale*compressed_width)
+    # y_line = fit_line(vinterval.lower, vinterval.upper, render_config.margin, render_config.margin + scale*layout_height)
+
+    # function pt(xy)
+    #     (x, y) = xy
+    #     return lx.Point(x_line(xf(x)), y_line(y))
+    # end
+
+    # offset = render_config.offset
+    # lx.Drawing(output_width, output_height, render_config.filename)
+    # lx.fontsize(render_config.fontsize)
+    # lx.setdash("solid")
+
+    # corner_count = 0
+    # annotation_count = 0
+
+    # for plan in layout.plans
+    #     sub_annotations = Vector{DiagramAnnotation}()
+    #     positions = [pt(corner.position) for corner in plan.corners]
+    #     mid = average(positions)
+    #     lx.poly(positions, :stroke, close=true)
+    #     corner_labels = list_annotation_labels(plan.beam_index, corner_digits, hor(corner_count, length(plan.corners)))
+
+    #     for (label, corner) in zip(corner_labels, plan.corners)
+    #         push!(sub_annotations, DiagramPoint(label, corner.position))
+    #     end
+    #     push!(sub_annotations, DiagramDistance(AnnotationLabel(
+    #         plan.beam_index, "Overall length"), width(plan.bbox.intervals[1])))
+    #     push!(sub_annotations, DiagramDistance(AnnotationLabel(
+    #         plan.beam_index, "Overall height"), width(plan.bbox.intervals[2])))
+        
+    #     annotation_labels = list_annotation_labels(plan.beam_index, annotation_digits, hor(annotation_count, length(plan.annotations)))
+    #     slopes = corner_label_orientation.(mid, positions)
+    #     lx.label.([short_string(label) for label in corner_labels], slopes, positions, offset=offset)
+    #     apos = [pt(annotation.position) for annotation in plan.annotations]
+    #     lx.circle.(apos, render_config.marker_size, :fill)
+    #     lx.label.([short_string(label) for label in annotation_labels], :SE, apos, offset=offset)
+
+    #     lx.label(string(plan.beam_index), :SE, mid, offset=offset)
+        
+    #     corner_count += length(plan.corners)
+    #     annotation_count += length(plan.annotations)
+
+    #     for annot in sort(sub_annotations, by=annotation_order)
+    #         push!(annotations, annot)
+    #     end
+    # end
+    
+    # lx.finish()
+    # if render_config.preview
+    #     lx.preview()
+    # end
+end
+
+
+
+
 
 ######################## Samples code
 
@@ -2162,8 +2298,16 @@ function demo2()
     beam0 = cut(a, cut(b, beam))
     beam1 = transform(rigid_transform_from_translation([5.0, 0.0, 0.0]), beam0)
     full_design = group([beam0, beam1])
+
+    plane = get_tangent_plane(full_design, -world_up)
+    diagram_x_vec = beam_dir(beam0)
+
+    view = ProjectedView("From top", plane, diagram_x_vec, DefinedInterval{Float64}(-0.1, 0.1))
+    render_projected_view(view, full_design, default_render_config)
+
+    @info "Stuff" plane diagram_x_vec
     
-    report = basic_report("Just a sketch", full_design)
+    report = basic_report("Just a sketch", full_design, [view])
     doc = make("../sample/demo2report", report)
     #render_html(doc)
     render_markdown(doc)
@@ -2176,4 +2320,4 @@ end # module
 ## Call
 
 # ONLY FOR DEBUG
-#Blueprint.demo2()
+Blueprint.demo2()
