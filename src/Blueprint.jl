@@ -25,6 +25,14 @@ struct DefinedInterval{T}
     upper::T
 end
 
+function inside_interval(x, interval::DefinedInterval{T}) where {T}
+    return interval.lower <= x && x < interval.upper
+end
+
+function interval_center(interval::DefinedInterval{T}) where {T}
+    return 0.5*(interval.lower + interval.upper)
+end
+
 function width(interval::DefinedInterval{T}) where {T}
     return interval.upper - interval.lower
 end
@@ -1066,6 +1074,10 @@ function transform(rt::RigidTransform{Float64}, plan::BeamCuttingPlan)
     plan.beam_index)
 end
 
+function compute_corner_loop_keys(polyhedron::Polyhedron, k::PlaneKey)
+    return [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(polyhedron, k))]
+end
+
 function cutting_plan(
     # The beam for which to generate a plane
     cbeam::ContextualBeam,
@@ -1096,7 +1108,7 @@ function cutting_plan(
     world_local = RigidTransform(basis, cog)
     local_world = invert(world_local)
 
-    loop = [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(beam.polyhedron, k))]
+    loop = compute_corner_loop_keys(beam.polyhedron, k)
     @assert 0 < length(loop)
 
     function localize(X)
@@ -1124,9 +1136,11 @@ struct RenderConfig
     filename::String
     preview::Bool
     offset::Float64
+    projected_view_width::Float64
+    projected_view_height::Float64
 end
 
-const default_render_config = RenderConfig(12, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5)
+const default_render_config = RenderConfig(12, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5, 400, 300)
 
 struct LineKM{T}
     k::T
@@ -1495,8 +1509,8 @@ function char_range(lower::Char, upper::Char)
     return [Char(i) for i in Int(lower):Int(upper)]
 end
 
-corner_digits = char_range('a', 'z')
-annotation_digits = char_range('A', 'Z')
+const corner_digits = char_range('a', 'z')
+const annotation_digits = char_range('A', 'Z')
 
 function hor(lower, n)
     return lower:(lower + n - 1)
@@ -1615,7 +1629,7 @@ end
 ### More components
 
 struct Group <: AbstractComponent
-    memberships::Set{Any}
+    memberships::PersistentSet{Any}
     components::Vector{AbstractComponent}
 end
 
@@ -1646,11 +1660,12 @@ end
 function group(components...)
     dst = Vector{AbstractComponent}()
     group_sub!(dst, components)
-    return Group(Set{Any}(), dst)
+    return Group(PersistentSet{Any}(), dst)
 end
 
-function in_sets(component::AbstractComponent, sets...)
-    return Group(PersistentSet{Any}(sets), Vector{AbstractComponent}([component]))
+function with_memberships(component::AbstractComponent, sets...)
+    memberships = PersistentSet{Any}(sets)
+    return Group(memberships, Vector{AbstractComponent}([component]))
 end
 
 # Operations on groups
@@ -1676,7 +1691,7 @@ struct FlattenContext
 end
 
 function flatten(context::FlattenContext, group::Group, dst::Vector{AbstractContextualComponent})
-    inner_context = FlattenContext(pset())
+    inner_context = FlattenContext(union(context.memberships, group.memberships))
     for x in group.components
         flatten(inner_context, x, dst)
     end
@@ -2046,6 +2061,18 @@ function make(dst_root::String, report::Report)
 
     sorted_layouts = sort(collect(packed_layouts), by=layout_order)
 
+    if 0 < length(report.views)
+        viewnodes = Vector{DocNode}()
+        for (i, view) in enumerate(report.views)
+            local_name = @sprintf("projview%03d.svg", i)
+            diagram_svg_name = joinpath(dst_root, local_name)
+            diagram_render_config = @set render_config.filename = diagram_svg_name
+            render_projected_view(view, report.top_component, diagram_render_config)
+            push!(viewnodes, DocSection(view.label, DocImage(local_name, diagram_svg_name)))
+        end
+        push!(doc, DocSection("Projected Views", DocGroup(viewnodes)))
+    end
+
     for (beam_specs, layouts) in sorted_layouts
         specnodes = Vector{DocNode}()
         push!(specnodes, DocParagraph("Diagrams for nodes with these dimensions."))
@@ -2117,7 +2144,7 @@ function visit(src::Beam, dst::MeshBuilder)
     for (plane_key, plane) in polyhedron.planes
 
         # Get a loop for that plane
-        loop = [ordered_triplet(pair, plane_key) for pair in compute_corner_loop(plane_corner_keys(polyhedron, plane_key))]
+        loop = compute_corner_loop_keys(polyhedron, plane_key)
         n = length(loop)
         if 3 <= n
             a = loop[1]
@@ -2188,77 +2215,143 @@ function render_stl(filename::String, mesh::Mesh)
 end
 
 
+# struct ProjectedView
+#     label::String
+#     plane::Plane{Float64}
+#     diagram_x_vec::Vector{Float64}
+#     z_range::Interval{Float64}
+# end
+
+abstract type ProjectedComponent end
+
+struct ProjectedBeam <: ProjectedComponent
+    plane_keys::Set{PlaneKey}
+    bbox::BBox{Float64}
+    contextual_beam::ContextualBeam
+end
+
+
+function corner_part_of_planes(corner_key::PlaneKeyTuple3, planes_to_keep::Set{PlaneKey})
+    for x in corner_key
+        if x in planes_to_keep
+            return true
+        end
+    end
+    return false
+end
+
+function project(
+    view::ProjectedView, RT::RigidTransform{Float64},
+    cbeam::ContextualBeam, dst::Vector{ProjectedComponent})
+    beam = transform(RT, cbeam.component)
+
+    planes_to_exclude = Set{PlaneKey}()
+    if is_defined(view.z_range)
+        z_range = view.z_range::Interval{Float64}
+        for (corner_key, corner) in beam.polyhedron.corners
+            if !(inside_interval(corner[3], z_range))
+                for plane_key in corner_key
+                    push!(planes_to_exclude, plane_key)
+                end
+            end
+        end
+    end
+    planes_to_keep = Set([plane_key for (plane_key, plane) in beam.polyhedron.planes if !(plane_key in planes_to_exclude)])
+    annotations = Vector{Annotation}()
+    projections = Vector{Vector{Float64}}()
+    for plane in planes_to_keep
+        for annotation in get(beam.annotations, plane, [])
+            push!(projections, annotation.position)
+        end
+    end
+    for (corner_key, corner) in beam.polyhedron.corners
+        if corner_part_of_planes(corner_key, planes_to_keep)
+            push!(projections, corner)
+        end
+    end
+    bbox = compute_bbox(projections)
+    push!(dst, ProjectedBeam(planes_to_keep, bbox, @set cbeam.component = beam))
+end
+
+
+function render_projected_component(pt, pc::ProjectedBeam, render_config::RenderConfig)
+    cbeam = pc.contextual_beam
+    beam = cbeam.component
+    polyhedron = beam.polyhedron
+    all_positions = Vector{lx.Point}()
+    for plane_key in pc.plane_keys
+        loop = compute_corner_loop_keys(polyhedron, plane_key)
+        positions = [pt(polyhedron.corners[corner_key]) for corner_key in loop]
+        lx.poly(positions, :stroke, close=true)
+        for x in positions
+            push!(all_positions, x)
+        end
+    end
+    apos = [pt(annotation.position) for annotation in beam.annotations]
+    lx.circle.(apos, render_config.marker_size, :fill)
+    lower_right = argmax(pos -> pos.x + pos.y, all_positions)
+    lx.label(string(cbeam.index), :SE, lower_right, offset=render_config.offset)
+    
+end
 
 function render_projected_view(view::ProjectedView, component::AbstractComponent, render_config::RenderConfig)
-    #annotations = Vector{DiagramAnnotation}()
-    #box = bbox(layout)
-    # margin = render_config.margin
+    z_axis = normalize(view.plane.normal)
+    x_axis = normalize(view.diagram_x_vec - dot(z_axis, view.diagram_x_vec)*z_axis)
+    y_axis = cross(z_axis, x_axis)
+
+    refpos = pos_in_plane(view.plane)
+
+    R = [x_axis'; y_axis'; z_axis']
+    T = -R*refpos
+
+    RT = RigidTransform{Float64}(R, T)
+
+    components = flatten(component)
+
+    projected_components = Vector{ProjectedComponent}()
+    for contextual_component in components
+        project(view, RT, contextual_component, projected_components)
+    end
+
+    bbox = compute_bbox([x.bbox for x in projected_components])
+    margin = render_config.margin
+
+    x_interval = bbox.intervals[1]
+    y_interval = bbox.intervals[2]
+
+    src_width = width(x_interval)
+    src_height = width(y_interval)
+
+    scale = min(render_config.projected_view_width/src_width, render_config.projected_view_height/src_height)
+
+    proj_width = scale*src_width
+    proj_height = scale*src_height
+
+    x_line = LineKM{Float64}(scale, margin - scale*x_interval.lower)
+    y_line = LineKM{Float64}(scale, margin - scale*y_interval.lower)
+
+    output_width = 2*margin + proj_width
+    output_height = 2*margin + proj_height
+
+    function pt(xy)
+        x = xy[1]
+        y = xy[2]
+        return lx.Point(x_line(x), y_line(y))
+    end
     
-    # hinterval = box.intervals[1]
-    # vinterval = box.intervals[2]
-    
-    # layout_width = width(hinterval)
-    # layout_height = width(vinterval)
-    # xf = compression_function(layout, layout_height)
-    # scale = render_config.output_beam_height/layout_height
+    offset = render_config.offset
+    lx.Drawing(output_width, output_height, render_config.filename)
+    lx.fontsize(render_config.fontsize)
+    lx.setdash("solid")
 
-    # compressed_width = xf(hinterval.upper) - xf(hinterval.lower)
+    for pc in projected_components
+        render_projected_component(pt, pc, render_config)
+    end
 
-    # output_width = 2*margin + scale*compressed_width
-    # output_height = 2*margin + scale*layout_height
-
-    # x_line = fit_line(xf(hinterval.lower), xf(hinterval.upper), render_config.margin, render_config.margin + scale*compressed_width)
-    # y_line = fit_line(vinterval.lower, vinterval.upper, render_config.margin, render_config.margin + scale*layout_height)
-
-    # function pt(xy)
-    #     (x, y) = xy
-    #     return lx.Point(x_line(xf(x)), y_line(y))
-    # end
-
-    # offset = render_config.offset
-    # lx.Drawing(output_width, output_height, render_config.filename)
-    # lx.fontsize(render_config.fontsize)
-    # lx.setdash("solid")
-
-    # corner_count = 0
-    # annotation_count = 0
-
-    # for plan in layout.plans
-    #     sub_annotations = Vector{DiagramAnnotation}()
-    #     positions = [pt(corner.position) for corner in plan.corners]
-    #     mid = average(positions)
-    #     lx.poly(positions, :stroke, close=true)
-    #     corner_labels = list_annotation_labels(plan.beam_index, corner_digits, hor(corner_count, length(plan.corners)))
-
-    #     for (label, corner) in zip(corner_labels, plan.corners)
-    #         push!(sub_annotations, DiagramPoint(label, corner.position))
-    #     end
-    #     push!(sub_annotations, DiagramDistance(AnnotationLabel(
-    #         plan.beam_index, "Overall length"), width(plan.bbox.intervals[1])))
-    #     push!(sub_annotations, DiagramDistance(AnnotationLabel(
-    #         plan.beam_index, "Overall height"), width(plan.bbox.intervals[2])))
-        
-    #     annotation_labels = list_annotation_labels(plan.beam_index, annotation_digits, hor(annotation_count, length(plan.annotations)))
-    #     slopes = corner_label_orientation.(mid, positions)
-    #     lx.label.([short_string(label) for label in corner_labels], slopes, positions, offset=offset)
-    #     apos = [pt(annotation.position) for annotation in plan.annotations]
-    #     lx.circle.(apos, render_config.marker_size, :fill)
-    #     lx.label.([short_string(label) for label in annotation_labels], :SE, apos, offset=offset)
-
-    #     lx.label(string(plan.beam_index), :SE, mid, offset=offset)
-        
-    #     corner_count += length(plan.corners)
-    #     annotation_count += length(plan.annotations)
-
-    #     for annot in sort(sub_annotations, by=annotation_order)
-    #         push!(annotations, annot)
-    #     end
-    # end
-    
-    # lx.finish()
-    # if render_config.preview
-    #     lx.preview()
-    # end
+    lx.finish()
+    if render_config.preview
+        lx.preview()
+    end
 end
 
 
@@ -2303,10 +2396,8 @@ function demo2()
     diagram_x_vec = beam_dir(beam0)
 
     view = ProjectedView("From top", plane, diagram_x_vec, DefinedInterval{Float64}(-0.1, 0.1))
-    render_projected_view(view, full_design, default_render_config)
+    #render_projected_view(view, full_design, @set default_render_config.preview = true)
 
-    @info "Stuff" plane diagram_x_vec
-    
     report = basic_report("Just a sketch", full_design, [view])
     doc = make("../sample/demo2report", report)
     #render_html(doc)
@@ -2320,4 +2411,4 @@ end # module
 ## Call
 
 # ONLY FOR DEBUG
-Blueprint.demo2()
+#Blueprint.demo2()

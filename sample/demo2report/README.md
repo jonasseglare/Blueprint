@@ -2,6 +2,11 @@
 
 [See the full model](full_model.stl)
 
+## Projected Views
+
+### From top
+
+![projview001.svg](projview001.svg)
 ## Beam dims 1.000x3.000x6.000
 
 Diagrams for nodes with these dimensions.

@@ -614,6 +614,14 @@ end
 
     layouts = packed_layouts[k]
     @test 2 == length(layouts)
+
+    membeams = bp.get_beams(bp.with_memberships(bp.with_memberships(beams, :a), :b))
+    @test 2 == length(membeams)
+    for x in membeams
+        @test :a in x.memberships
+        @test :b in x.memberships
+        @test !(:c in x.memberships)
+    end
 end
 
 ## Numeric
