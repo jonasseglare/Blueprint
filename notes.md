@@ -52,8 +52,11 @@ Task breakdown, cutting plans:
 
 ### Continuation
 
-More features to make it useful.
+Projects:
+* Insulation boards
+* Cave door
 
+More features to make it useful:
 * ~~Set memberships for beams, components, etc: Render one mesh for each set.~~
 * Beam array
 * Drilling routines for groups

@@ -2012,11 +2012,6 @@ function render(node::DocLink, context::DocContext, dst::HtmlRenderer)
     write!(dst, string("<a href='", node.target, "'>", node.title, "</a>"))
 end
 
-struct DocLink <: DocNode
-    title::String
-    target::String
-end
-
 style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collapse: collapse;}"
 
 function render_html(node::DocInit)
