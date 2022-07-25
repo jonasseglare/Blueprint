@@ -2060,6 +2060,18 @@ function make(dst_root::String, report::Report)
 
     sorted_layouts = sort(collect(packed_layouts), by=layout_order)
 
+    if 0 < length(report.views)
+        viewnodes = Vector{DocNode}()
+        for (i, view) in enumerate(report.views)
+            local_name = @sprintf("projview%03d.svg", i)
+            diagram_svg_name = joinpath(dst_root, local_name)
+            diagram_render_config = @set render_config.filename = diagram_svg_name
+            render_projected_view(view, report.top_component, diagram_render_config)
+            push!(viewnodes, DocSection(view.label, DocImage(local_name, diagram_svg_name)))
+        end
+        push!(doc, DocSection("Projected Views", DocGroup(viewnodes)))
+    end
+
     for (beam_specs, layouts) in sorted_layouts
         specnodes = Vector{DocNode}()
         push!(specnodes, DocParagraph("Diagrams for nodes with these dimensions."))
@@ -2383,7 +2395,7 @@ function demo2()
     diagram_x_vec = beam_dir(beam0)
 
     view = ProjectedView("From top", plane, diagram_x_vec, DefinedInterval{Float64}(-0.1, 0.1))
-    render_projected_view(view, full_design, @set default_render_config.preview = true)
+    #render_projected_view(view, full_design, @set default_render_config.preview = true)
 
     report = basic_report("Just a sketch", full_design, [view])
     doc = make("../sample/demo2report", report)
