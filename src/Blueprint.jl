@@ -777,6 +777,11 @@ function get_tangent_plane(component::AbstractComponent, normal::Vector{Float64}
     return translate(plane, shift)
 end
 
+function push_component_against_component(target_component, push_direction, component_to_push)
+    return push_against(flip(get_tangent_plane(target_component, push_direction)), component_to_push)
+end
+
+
 struct NamedPlane
     name::PlaneKey
     plane::Plane{Float64}
@@ -1820,6 +1825,10 @@ function basic_report(project_name::String, top_component::AbstractComponent)
 end
 
 function layout_order(pair::Tuple{BeamSpecs, Vector{BeamLayout}})
+    return (beam_specs_order(pair[1]), length(pair[2]))
+end
+
+function layout_order(pair::Pair{BeamSpecs, Vector{BeamLayout}})
     return (beam_specs_order(pair[1]), length(pair[2]))
 end
 

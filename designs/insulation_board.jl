@@ -36,6 +36,7 @@ const left_cut = bp.NamedPlane(:left_cut, bp.translate_normalized(left_wall, -cr
 const right_cut = bp.NamedPlane(:right_cut, bp.translate_normalized(right_wall, -crop_margin))
 
 const strong_specs = bp.beam_specs(0.03, 0.04)
+const plywood_sheet_specs = bp.beam_specs(1.0, 0.3)
 
 function shelf_cut(x)
     return bp.cut(left_cut, bp.cut(right_cut, x))
@@ -54,11 +55,8 @@ function beam_array_between_planes(start_plane, end_plane, beam_prototype, count
     end_plane = bp.normalize_plane(end_plane)
     start_translation = bp.push_against_transform(start_plane, beam_prototype).translation
     end_translation = bp.push_against_transform(end_plane, beam_prototype).translation
-
     step_count = count - 1
-    
     step = (1.0/step_count)*(end_translation - start_translation)
-
     return bp.group([bp.transform(bp.rigid_transform_from_translation(start_translation + step*i), beam_prototype) for i in 0:step_count])
 end
 
@@ -74,8 +72,11 @@ function inner_insulation_board(offset)
     far_beam = shelf_cut(bp.push_against(far_plane, supporting_beam([1.0, 0.0, 0.0])))
 
     connecting_beams = cut_close_far(beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4))
+
+    plywood_sheet = shelf_cut(cut_close_far(bp.orient_beam(bp.new_beam(plywood_sheet_specs), [1.0, 0.0, 0.0], bp.local_y_dir)))
     
-    return bp.group([close_beam, far_beam, connecting_beams])
+    return bp.group([#close_beam, far_beam, connecting_beams,
+                     bp.push_component_against_component(close_beam, [0.0, 0.0, -1.0], plywood_sheet)])
 end
 
 function render()
