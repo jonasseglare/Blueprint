@@ -75,8 +75,10 @@ function inner_insulation_board(offset)
 
     plywood_sheet = shelf_cut(cut_close_far(bp.orient_beam(bp.new_beam(plywood_sheet_specs), [1.0, 0.0, 0.0], bp.local_y_dir)))
     
-    return bp.group([#close_beam, far_beam, connecting_beams,
-                     bp.push_component_against_component(close_beam, [0.0, 0.0, -1.0], plywood_sheet)])
+    return bp.group([close_beam, far_beam, connecting_beams,
+                     #plywood_sheet
+                     bp.push_component_against_component(close_beam, [0.0, 0.0, -1.0], plywood_sheet)
+                     ])
 end
 
 function render()
