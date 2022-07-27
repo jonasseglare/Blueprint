@@ -1,3 +1,4 @@
+using Revise
 import Blueprint
 const bp = Blueprint
 
@@ -44,14 +45,37 @@ function supporting_beam(dir)
     return bp.push_against(base, bp.orient_beam(bp.new_beam(strong_specs), dir, bp.local_y_dir))
 end
 
+
+
+
+function beam_array_between_planes(start_plane, end_plane, beam_prototype, count)
+    @assert 2 <= count
+    start_plane = bp.normalize_plane(start_plane)
+    end_plane = bp.normalize_plane(end_plane)
+    start_translation = bp.push_against_transform(start_plane, beam_prototype).translation
+    end_translation = bp.push_against_transform(end_plane, beam_prototype).translation
+
+    step_count = count - 1
+    
+    step = (1.0/step_count)*(end_translation - start_translation)
+
+    return bp.group([bp.transform(bp.rigid_transform_from_translation(start_translation + step*i), beam_prototype) for i in 0:step_count])
+end
+
 function inner_insulation_board(offset)
-    close_plane = bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, offset, 0.0])
-    far_plane = bp.plane_at_pos([0.0, -1.0, 0.0], [0.0, offset + inner_board_raw_width, 0.0])
+    close_plane = bp.NamedPlane(:close_plane, bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, offset, 0.0]))
+    far_plane = bp.NamedPlane(:far_plane, bp.plane_at_pos([0.0, -1.0, 0.0], [0.0, offset + inner_board_raw_width, 0.0]))
+
+    function cut_close_far(x)
+        return bp.cut(close_plane, bp.cut(far_plane, x))
+    end
 
     close_beam = shelf_cut(bp.push_against(close_plane, supporting_beam([1.0, 0.0, 0.0])))
     far_beam = shelf_cut(bp.push_against(far_plane, supporting_beam([1.0, 0.0, 0.0])))
+
+    connecting_beams = cut_close_far(beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4))
     
-    return bp.group([close_beam, far_beam])
+    return bp.group([close_beam, far_beam, connecting_beams])
 end
 
 function render()

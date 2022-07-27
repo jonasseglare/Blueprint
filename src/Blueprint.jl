@@ -761,11 +761,14 @@ function min_projection(plane::Plane{Float64}, component::AbstractComponent)
     return minimum(shifts)
 end
 
-function push_against(plane::Plane{Float64}, component::AbstractComponent)
+function push_against_transform(plane, component)
     plane = normalize_plane(plane)
     shift = min_projection(plane, component)
-    translation = rigid_transform_from_translation(-shift*plane.normal)
-    return transform(translation, component)
+    return rigid_transform_from_translation(-shift*plane.normal)
+end
+
+function push_against(plane::Plane{Float64}, component::AbstractComponent)
+    return transform(push_against_transform(plane, component), component)
 end
 
 function get_tangent_plane(component::AbstractComponent, normal::Vector{Float64})
@@ -777,6 +780,10 @@ end
 struct NamedPlane
     name::PlaneKey
     plane::Plane{Float64}
+end
+
+function push_against(plane::NamedPlane, component::AbstractComponent)
+    return push_against(plane.plane, component)
 end
 
 function contains_annotation(p::Polyhedron, k::PlaneKey, x::Vector{Float64})
