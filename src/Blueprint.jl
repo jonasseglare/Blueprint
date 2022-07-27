@@ -1808,6 +1808,10 @@ function basic_report(project_name::String, top_component::AbstractComponent, vi
     return Report(project_name, top_component, views, default_render_config)
 end
 
+function basic_report(project_name::String, top_component::AbstractComponent)
+    return basic_report(project_name, top_component, Vector{ProjectedView}())
+end
+
 function layout_order(pair::Tuple{BeamSpecs, Vector{BeamLayout}})
     return (beam_specs_order(pair[1]), length(pair[2]))
 end

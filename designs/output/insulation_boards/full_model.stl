@@ -1,0 +1,170 @@
+solid the_design
+facet normal -0.0 -0.0 1.0
+    outer loop
+        vertex 2.4 0.03 0.04
+        vertex -0.1 0.0 0.04
+        vertex 2.4 0.0 0.04
+    endloop
+endfacet
+facet normal -0.0 -0.0 1.0
+    outer loop
+        vertex 2.4 0.03 0.04
+        vertex -0.1 0.03 0.04
+        vertex -0.1 0.0 0.04
+    endloop
+endfacet
+facet normal 1.0 -0.0 -0.0
+    outer loop
+        vertex 2.4 0.03 0.04
+        vertex 2.4 0.0 0.04
+        vertex 2.4 0.0 0.0
+    endloop
+endfacet
+facet normal 1.0 -0.0 -0.0
+    outer loop
+        vertex 2.4 0.03 0.04
+        vertex 2.4 0.0 0.0
+        vertex 2.4 0.03 0.0
+    endloop
+endfacet
+facet normal -0.0 1.0 -0.0
+    outer loop
+        vertex 2.4 0.03 0.04
+        vertex -0.1 0.03 0.0
+        vertex -0.1 0.03 0.04
+    endloop
+endfacet
+facet normal -0.0 1.0 -0.0
+    outer loop
+        vertex 2.4 0.03 0.04
+        vertex 2.4 0.03 0.0
+        vertex -0.1 0.03 0.0
+    endloop
+endfacet
+facet normal -1.0 -0.0 -0.0
+    outer loop
+        vertex -0.1 0.0 0.0
+        vertex -0.1 0.03 0.04
+        vertex -0.1 0.03 0.0
+    endloop
+endfacet
+facet normal -1.0 -0.0 -0.0
+    outer loop
+        vertex -0.1 0.0 0.0
+        vertex -0.1 0.0 0.04
+        vertex -0.1 0.03 0.04
+    endloop
+endfacet
+facet normal -0.0 -1.0 -0.0
+    outer loop
+        vertex -0.1 0.0 0.0
+        vertex 2.4 0.0 0.0
+        vertex 2.4 0.0 0.04
+    endloop
+endfacet
+facet normal -0.0 -1.0 -0.0
+    outer loop
+        vertex -0.1 0.0 0.0
+        vertex 2.4 0.0 0.04
+        vertex -0.1 0.0 0.04
+    endloop
+endfacet
+facet normal -0.0 -0.0 -1.0
+    outer loop
+        vertex -0.1 0.0 0.0
+        vertex -0.1 0.03 0.0
+        vertex 2.4 0.03 0.0
+    endloop
+endfacet
+facet normal -0.0 -0.0 -1.0
+    outer loop
+        vertex -0.1 0.0 0.0
+        vertex 2.4 0.03 0.0
+        vertex 2.4 0.0 0.0
+    endloop
+endfacet
+facet normal -0.0 -0.0 1.0
+    outer loop
+        vertex 2.4 0.41666666666666674 0.04
+        vertex -0.1 0.3866666666666667 0.04
+        vertex 2.4 0.3866666666666667 0.04
+    endloop
+endfacet
+facet normal -0.0 -0.0 1.0
+    outer loop
+        vertex 2.4 0.41666666666666674 0.04
+        vertex -0.1 0.41666666666666674 0.04
+        vertex -0.1 0.3866666666666667 0.04
+    endloop
+endfacet
+facet normal 1.0 -0.0 -0.0
+    outer loop
+        vertex 2.4 0.41666666666666674 0.04
+        vertex 2.4 0.3866666666666667 0.04
+        vertex 2.4 0.3866666666666667 0.0
+    endloop
+endfacet
+facet normal 1.0 -0.0 -0.0
+    outer loop
+        vertex 2.4 0.41666666666666674 0.04
+        vertex 2.4 0.3866666666666667 0.0
+        vertex 2.4 0.41666666666666674 0.0
+    endloop
+endfacet
+facet normal -0.0 1.0 -0.0
+    outer loop
+        vertex 2.4 0.41666666666666674 0.04
+        vertex -0.1 0.41666666666666674 0.0
+        vertex -0.1 0.41666666666666674 0.04
+    endloop
+endfacet
+facet normal -0.0 1.0 -0.0
+    outer loop
+        vertex 2.4 0.41666666666666674 0.04
+        vertex 2.4 0.41666666666666674 0.0
+        vertex -0.1 0.41666666666666674 0.0
+    endloop
+endfacet
+facet normal -1.0 -0.0 -0.0
+    outer loop
+        vertex -0.1 0.3866666666666667 0.0
+        vertex -0.1 0.41666666666666674 0.04
+        vertex -0.1 0.41666666666666674 0.0
+    endloop
+endfacet
+facet normal -1.0 -0.0 -0.0
+    outer loop
+        vertex -0.1 0.3866666666666667 0.0
+        vertex -0.1 0.3866666666666667 0.04
+        vertex -0.1 0.41666666666666674 0.04
+    endloop
+endfacet
+facet normal -0.0 -1.0 -0.0
+    outer loop
+        vertex -0.1 0.3866666666666667 0.0
+        vertex 2.4 0.3866666666666667 0.0
+        vertex 2.4 0.3866666666666667 0.04
+    endloop
+endfacet
+facet normal -0.0 -1.0 -0.0
+    outer loop
+        vertex -0.1 0.3866666666666667 0.0
+        vertex 2.4 0.3866666666666667 0.04
+        vertex -0.1 0.3866666666666667 0.04
+    endloop
+endfacet
+facet normal -0.0 -0.0 -1.0
+    outer loop
+        vertex -0.1 0.3866666666666667 0.0
+        vertex -0.1 0.41666666666666674 0.0
+        vertex 2.4 0.41666666666666674 0.0
+    endloop
+endfacet
+facet normal -0.0 -0.0 -1.0
+    outer loop
+        vertex -0.1 0.3866666666666667 0.0
+        vertex 2.4 0.41666666666666674 0.0
+        vertex 2.4 0.3866666666666667 0.0
+    endloop
+endfacet
+endsolid the_design
