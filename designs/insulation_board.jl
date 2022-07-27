@@ -36,7 +36,7 @@ const left_cut = bp.NamedPlane(:left_cut, bp.translate_normalized(left_wall, -cr
 const right_cut = bp.NamedPlane(:right_cut, bp.translate_normalized(right_wall, -crop_margin))
 
 const strong_specs = bp.beam_specs(0.03, 0.04)
-const plywood_sheet_specs = bp.beam_specs(1.0, 0.3)
+const plywood_sheet_specs = bp.beam_specs(1.0, 0.003)
 
 function shelf_cut(x)
     return bp.cut(left_cut, bp.cut(right_cut, x))
