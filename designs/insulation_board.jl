@@ -69,7 +69,6 @@ function inner_insulation_board(offset)
 
     close_inner = bp.get_tangent_cutting_plane(:close_inner, close_beam, [0.0, 1.0, 0.0])
     far_inner = bp.get_tangent_cutting_plane(:far_inner, far_beam, [0.0, -1.0, 0.0])
-    @info "close and far" close_inner far_inner
 
     connecting_beams = bp.cut_many([close_inner, far_inner], bp.beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4))
 

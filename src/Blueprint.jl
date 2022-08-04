@@ -75,6 +75,18 @@ function compute_bbox(points::AbstractVector{Vector{T}}) where {T}
     return BBox{T}(dst)
 end
 
+function bbox_lower(bbox)
+    return [interval.lower for interval in bbox.intervals]
+end
+
+function bbox_upper(bbox)
+    return [interval.upper for interval in bbox.intervals]
+end
+
+function bbox_center(bbox)
+    return 0.5*(bbox_lower(bbox) + bbox_upper(bbox))
+end
+
 function bounding_points(bbox::BBox{T}) where {T}
     return [[ivl.lower for ivl in bbox.intervals], [ivl.upper for ivl in bbox.intervals]]
 end
@@ -1220,7 +1232,7 @@ struct RenderConfig
     projected_view_height::Float64
 end
 
-const default_render_config = RenderConfig(12, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5, 400, 300)
+const default_render_config = RenderConfig(20, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5, 800, 600)
 
 struct LineKM{T}
     k::T
@@ -1438,6 +1450,7 @@ function bbox(beam_layout::BeamLayout)
     @assert 0 <= dst.intervals[1].lower
     @assert dst.intervals[1].upper <= beam_layout.beam_length
     return BBox{Float64}([DefinedInterval{Float64}(0, beam_layout.beam_length), dst.intervals[2]])
+    #return BBox{Float64}([dst.intervals[1], dst.intervals[2]])
 end
 
 struct IntervalEdge
@@ -1466,6 +1479,10 @@ end
 
 function generate_interval_edges(layout::BeamLayout, tol=1.0e-6)
     edges = [edge for plan in layout.plans for edge in generate_interval_edges(plan, tol)]
+    for x in [0.0, layout.beam_length]
+        push!(edges, IntervalEdge(x, 0))
+    end
+    #push!(edges, IntervalEdge(x, -1))
     return sort(edges, by=x->x.position)
 end
 
@@ -1701,7 +1718,7 @@ function render(layout::BeamLayout, render_config::RenderConfig)
         lx.circle.(apos, render_config.marker_size, :fill)
         lx.label.([short_string(label) for label in annotation_labels], :SE, apos, offset=offset)
 
-        lx.label(string(plan.beam_index), :SE, mid, offset=offset)
+        lx.text(string(plan.beam_index), mid, halign=:center, valign=:center)
         
         corner_count += length(plan.corners)
         annotation_count += length(plan.annotations)
@@ -2251,10 +2268,7 @@ function make(dst_root::String, report::Report)
             local_name = @sprintf("diagram%03d.svg", diagram_counter)
             diagram_svg_name = joinpath(dst_root, local_name)
             diagram_render_config = @set render_config.filename = diagram_svg_name
-
-            println(string("LAYOUT ", title))
             annotations = render(layout, diagram_render_config)
-            
             layout_nodes = Vector{DocNode}()
             push!(layout_nodes, annotation_table(annotations))
             push!(layout_nodes, DocImage(local_name, diagram_svg_name))
@@ -2455,23 +2469,30 @@ end
 
 
 function render_projected_component(pt, pc::ProjectedBeam, render_config::RenderConfig)
+    lx.sethue("black")
     cbeam = pc.contextual_beam
     beam = cbeam.component
     polyhedron = beam.polyhedron
-    all_positions = Vector{lx.Point}()
+    ##all_positions = Vector{lx.Point}()
+    all_positions = Vector{Vector{Float64}}()
     for plane_key in pc.plane_keys
         loop = compute_corner_loop_keys(polyhedron, plane_key)
-        positions = [pt(polyhedron.corners[corner_key]) for corner_key in loop]
-        lx.poly(positions, :stroke, close=true)
+        positions = [polyhedron.corners[corner_key] for corner_key in loop]
+        points = [pt(pos) for pos in positions]
+        lx.poly(points, :stroke, close=true)
         for x in positions
             push!(all_positions, x)
         end
     end
     apos = [pt(annotation.position) for annotation in beam.annotations]
     lx.circle.(apos, render_config.marker_size, :fill)
-    lower_right = argmax(pos -> pos.x + pos.y, all_positions)
-    lx.label(string(cbeam.index), :SE, lower_right, offset=render_config.offset)
-    
+    #lower_right = argmax(pos -> pos.x + pos.y, all_positions)
+    bbox = compute_bbox(all_positions)
+    cpos = bbox_center(bbox)
+    #lx.label(string(cbeam.index), :SE, lower_right, offset=render_config.offset)
+    lx.sethue("red")
+    lx.fontsize(render_config.fontsize)
+    lx.text(string(cbeam.index), pt(cpos), halign=:center, valign=:center)
 end
 
 function render_projected_view(view::ProjectedView, component::AbstractComponent, render_config::RenderConfig)

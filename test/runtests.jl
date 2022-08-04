@@ -547,11 +547,11 @@ end
     edges = bp.generate_interval_edges(layout)
 
     intervals = bp.generate_incompressible_intervals(bp.simplify_edge_multiples(edges))
-    @test 3 == length(intervals)
+    @test 5 == length(intervals)
 
     xy = bp.generate_compression_function_points(intervals, 1.0)
-    @test 6 == length(xy)
-    @test (8.5, 5.5) == last(xy)
+    @test 8 == length(xy)
+    @test (9.0, 6.0) == last(xy)
 
     @test 0 == length(bp.generate_incompressible_intervals(Vector{bp.IntervalEdge}()))
     @test 0 == length(bp.generate_compression_function_points(
