@@ -18,7 +18,6 @@ const PlaneKey = Symbol
 const PlaneKeyTuple2 = Tuple{PlaneKey, PlaneKey}
 const PlaneKeyTuple3 = Tuple{PlaneKey, PlaneKey, PlaneKey}
 const Vector64 = Vector{Float64}
-const Namespace = PersistentVector{Symbol}
 
 struct DefinedInterval{T}
     lower::T
@@ -393,24 +392,31 @@ function compute_bounded_lines(plane_map::PersistentHashMap{PlaneKey,Plane{Float
 end
 
 function shadowed_by(a::Plane{T}, b::Plane{T}) where {T}
-    return a.normal == b.normal && a.offset < b.offset
+    return a.normal == b.normal && a.offset <= b.offset
 end
 
-function shadowed_by(a::Plane{T}, plane_map::AbstractDict{PlaneKey, Plane{T}}) where {T}
+function shadowed_by(akey, a::Plane{T}, plane_map::AbstractDict{PlaneKey, Plane{T}}) where {T}
     for (sym, plane) in plane_map
-        if shadowed_by(a, plane)
+        if akey != sym && shadowed_by(a, plane)
             return true
         end
     end
     return false
 end
 
+function add_plane_to_dict!(dst::Dict{PlaneKey, Plane{Float64}}, key, plane)
+    if !shadowed_by(key, plane, dst)
+        dst[key] = plane
+    end
+end
+
 function remove_shadowed_planes(plane_map::AbstractDict{PlaneKey,Plane{Float64}})
     dst = Dict{PlaneKey,Plane{Float64}}()
     for (sym, plane) in plane_map
-        if !shadowed_by(plane, plane_map)
-            dst[sym] = plane
-        end
+        add_plane_to_dict!(dst, sym, plane)
+    end
+    if length(dst) == 0
+        return PersistentHashMap{Symbol, Plane{Float64}}()
     end
     return phmap(collect(dst))
 end
@@ -450,8 +456,13 @@ function remove_planes_without_corners(
         return planes
     end
 
-    # If there exists at least one pair of planes that are not parallel, then
-    # *all* planes that are part of the polyhedron will be have at least one corner.
+    # Observations:
+    #  * The existence of at least one corner implies that there
+    #    are at least three planes with linearly independent normals.
+    #  * Any other plane will have a normal which is linearly
+    #    independent with two other planes and therefore form a corner with those planes.
+    #  * Therefore, if there is a plane without corners, it means all those corners fall *outside* of the polyhedron
+    #    formed by the other planes, and therefore that plane is redundant.
 
     referred_planes = Set{PlaneKey}()
     for (k3, x) in corners
@@ -466,7 +477,7 @@ function remove_planes_without_corners(
             dst[k] = p
         end
     end
-    return planes
+    return phmap(collect(dst))
 end
 
 function polyhedron_from_planes(plane_map::AbstractDict{PlaneKey,Plane{Float64}})::Polyhedron
@@ -480,8 +491,31 @@ function has_corners(polyhedron::Polyhedron)
     return 0 < length(polyhedron.corners)
 end
 
+function disp_map(m)
+    println(string("MAP WITH ENTRIES:"))
+    for (k, v) in m
+        println(string("  * KEY ", k, " VALUE ", v))
+        println("")
+    end
+end
+
+function add_plane_to_pdict(dst, k, v)
+    if shadowed_by(k, v, dst)
+        return dst
+    else
+        return assoc(dst, k, v)
+    end
+end
+
+function add_planes_to_pdict(dst, plane_map)
+    for (k, v) in plane_map
+        dst = add_plane_to_pdict(dst, k, v)
+    end
+    return dst
+end
+
 function add_planes(polyhedron::Polyhedron, plane_map::AbstractDict{PlaneKey,Plane{Float64}})::Polyhedron
-    return polyhedron_from_planes(merge(polyhedron.planes, plane_map))
+    return polyhedron_from_planes(add_planes_to_pdict(polyhedron.planes, plane_map))
 end
 
 function add_plane(polyhedron::Polyhedron, key::PlaneKey, value::Plane{Float64})::Polyhedron
@@ -593,8 +627,15 @@ struct BeamSpecs
     # Used to control what is included in a 3d rendering
     level::Integer
 
-    # Used for grouping beams into namespace
-    namespace::Namespace
+    label::String
+end
+
+function set_cutting_plan_key(beam_specs, k)
+    return @set beam_specs.diagram_strategy.cutting_plan_key = k
+end
+
+function set_label(beam_specs, label)
+    return @set beam_specs.label = label
 end
 
 function beam_specs_order(specs::BeamSpecs)
@@ -610,7 +651,7 @@ function beam_specs(Xsize::Real, Ysize::Real)
     Xsize, Ysize, default_beam_color, true,
     default_beam_length, PackedDiagramStrategy(
         default_beam_margin, beam_X_lower),
-    nothing, 0, pvec(Vector{Symbol}()))
+    nothing, 0, "")
 end
 
 function quadratic_beam_specs(size::Real)
@@ -761,11 +802,14 @@ function min_projection(plane::Plane{Float64}, component::AbstractComponent)
     return minimum(shifts)
 end
 
-function push_against(plane::Plane{Float64}, component::AbstractComponent)
+function push_against_transform(plane, component)
     plane = normalize_plane(plane)
     shift = min_projection(plane, component)
-    translation = rigid_transform_from_translation(-shift*plane.normal)
-    return transform(translation, component)
+    return rigid_transform_from_translation(-shift*plane.normal)
+end
+
+function push_against(plane::Plane{Float64}, component::AbstractComponent)
+    return transform(push_against_transform(plane, component), component)
 end
 
 function get_tangent_plane(component::AbstractComponent, normal::Vector{Float64})
@@ -774,9 +818,28 @@ function get_tangent_plane(component::AbstractComponent, normal::Vector{Float64}
     return translate(plane, shift)
 end
 
+function push_component_against_component(target_component, push_direction, component_to_push)
+    return push_against(flip(get_tangent_plane(target_component, push_direction)), component_to_push)
+end
+
+function beam_array_between_planes(start_plane, end_plane, beam_prototype, count)
+    @assert 2 <= count
+    start_plane = normalize_plane(start_plane)
+    end_plane = normalize_plane(end_plane)
+    start_translation = push_against_transform(start_plane, beam_prototype).translation
+    end_translation = push_against_transform(end_plane, beam_prototype).translation
+    step_count = count - 1
+    step = (1.0/step_count)*(end_translation - start_translation)
+    return group([transform(rigid_transform_from_translation(start_translation + step*i), beam_prototype) for i in 0:step_count])
+end
+
 struct NamedPlane
     name::PlaneKey
     plane::Plane{Float64}
+end
+
+function push_against(plane::NamedPlane, component::AbstractComponent)
+    return push_against(plane.plane, component)
 end
 
 function contains_annotation(p::Polyhedron, k::PlaneKey, x::Vector{Float64})
@@ -952,7 +1015,7 @@ function remove_from_tuple(x, k)
 end
 
 function plane_corner_keys(phd::Polyhedron, pk::PlaneKey)
-    return [remove_from_tuple(k, pk) for (k, v) in phd.corners if pk in k]
+    return convert(Vector{PlaneKeyTuple2}, [remove_from_tuple(k, pk) for (k, v) in phd.corners if pk in k])
 end
 
 function are_connected(a::Tuple{PlaneKey,PlaneKey}, b::Tuple{PlaneKey,PlaneKey})
@@ -1088,8 +1151,13 @@ function cutting_plan(
     # The direction of the beam
     specified_beam_dir::Vector{Float64})
 
+
     beam = cbeam.component
 
+    if !(haskey(beam.polyhedron.planes, k))
+        error(string("Cannot generate cutting plan for beam and key ", k))
+    end
+    
     # The normal of the plane is pointing inward.
     # Flip it so that it points outwards.
     z = normalize(beam.polyhedron.planes[k].normal)
@@ -1663,6 +1731,12 @@ function group(components...)
     return Group(PersistentSet{Any}(), dst)
 end
 
+function membership_group(s, components...)
+    dst = Vector{AbstractComponent}()
+    group_sub!(dst, components)
+    return Group(PersistentSet{Any}([s]), dst)
+end
+
 function with_memberships(component::AbstractComponent, sets...)
     memberships = PersistentSet{Any}(sets)
     return Group(memberships, Vector{AbstractComponent}([component]))
@@ -1808,12 +1882,24 @@ function basic_report(project_name::String, top_component::AbstractComponent, vi
     return Report(project_name, top_component, views, default_render_config)
 end
 
+function basic_report(project_name::String, top_component::AbstractComponent)
+    return basic_report(project_name, top_component, Vector{ProjectedView}())
+end
+
 function layout_order(pair::Tuple{BeamSpecs, Vector{BeamLayout}})
     return (beam_specs_order(pair[1]), length(pair[2]))
 end
 
+function layout_order(pair::Pair{BeamSpecs, Vector{BeamLayout}})
+    return (beam_specs_order(pair[1]), length(pair[2]))
+end
+
 function title(specs::BeamSpecs)
-    return @sprintf("Beam dims %.3fx%.3fx%.3f", specs.Xsize, specs.Ysize, specs.length)
+    if specs.label == ""
+        return @sprintf("Beam dims %.3fx%.3fx%.3f", specs.Xsize, specs.Ysize, specs.length)
+    else
+        return specs.label
+    end
 end
 
 abstract type DocNode end
@@ -2012,11 +2098,6 @@ function render(node::DocLink, context::DocContext, dst::HtmlRenderer)
     write!(dst, string("<a href='", node.target, "'>", node.title, "</a>"))
 end
 
-struct DocLink <: DocNode
-    title::String
-    target::String
-end
-
 style = "td, th {border: 1px solid black; padding: 0.5em;} table {border-collapse: collapse;}"
 
 function render_html(node::DocInit)
@@ -2187,6 +2268,10 @@ function make_mesh(component::AbstractComponent)
     return make_mesh(builder)
 end
 
+function stl_format_float(x)
+    return @sprintf("%.5e", x)
+end
+
 function render_stl(filename::String, mesh::Mesh)
     name = "the_design";
     open(filename, "w") do file
@@ -2194,7 +2279,7 @@ function render_stl(filename::String, mesh::Mesh)
         for triangle in mesh.triangles
             write(file, "facet normal")
             for nx in triangle.normal
-                write(file, string(" ", nx))
+                write(file, string(" ", stl_format_float(nx)))
             end
             write(file, "\n")
             write(file, "    outer loop\n")
@@ -2202,7 +2287,7 @@ function render_stl(filename::String, mesh::Mesh)
                 write(file, "        vertex")
                 vertex = mesh.vertices[i+1]
                 for x in vertex
-                    write(file, string(" ", x))
+                    write(file, string(" ", stl_format_float(x)))
                 end
                 write(file, "\n")
             end
