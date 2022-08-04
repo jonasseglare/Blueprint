@@ -1469,28 +1469,29 @@ function generate_interval_edges(layout::BeamLayout, tol=1.0e-6)
     return sort(edges, by=x->x.position)
 end
 
+# This function replaces many overlapping edges by a single one
 function simplify_edge_multiples(edges::Vector{IntervalEdge})
     dst0 = Vector{IntervalEdge}()
     if length(edges) == 0
         return dst0
     end
-    
+
     last_pos = edges[1].position
     last_step = 0
     for edge in edges
+        #@info "simplify" last_pos last_step edge
         if edge.position != last_pos
-            if last_step != 0
-                push!(dst0, IntervalEdge(last_pos, last_step))
-            end
+            @assert last_pos < edge.position
+            #if last_step != 0
+            push!(dst0, IntervalEdge(last_pos, last_step))
+            #end
             last_pos = edge.position
             last_step = edge.step
         else
             last_step += edge.step
         end
     end
-    if last_step != 0
-        push!(dst0, IntervalEdge(last_pos, last_step))
-    end
+    push!(dst0, IntervalEdge(last_pos, last_step))
     return dst0
 end
 
@@ -1504,6 +1505,8 @@ function generate_incompressible_intervals(edges_no_multiples::Vector{IntervalEd
             start_at = edge.position
         elseif current_level == 1 && next_level == 0
             push!(dst, DefinedInterval{Float64}(start_at, edge.position))
+        elseif current_level == 0 && edge.step == 0
+            push!(dst, DefinedInterval{Float64}(edge.position, edge.position))
         end
         current_level = next_level
     end
@@ -1519,17 +1522,25 @@ function generate_compression_function_points(
     if n == 0
         return dst
     end
-    push!(dst, (intervals[1].lower, intervals[1].lower))
-    push!(dst, (intervals[1].upper, intervals[1].upper))
 
+    function push_incompressible_interval(interval, at)
+        push!(dst, (interval.lower, at))
+        interval_width = interval.upper - interval.lower
+        if 0 < interval_width
+            push!(dst, (interval.upper, at + interval_width))
+        end
+    end
+
+    push_incompressible_interval(intervals[1], intervals[1].lower)
+
+    # Consider all gaps between incompressible intervals
     for i in 2:n
         left = intervals[i-1]
         right = intervals[i]
         (x, y0) = last(dst)
         step = right.lower - left.upper
         y1 = y0 + min(max_step, step)
-        push!(dst, (right.lower, y1))
-        push!(dst, (right.upper, y1 + (right.upper - right.lower)))
+        push_incompressible_interval(right, y1)
     end
     return dst
 end
@@ -1573,10 +1584,10 @@ function evaluate_piecewise_linear(xy_pairs::Vector{Tuple{Float64, Float64}}, x)
 end
 
 function compression_function(layout::BeamLayout, max_step::Float64, tol=1.0e-6)
-    xy = generate_compression_function_points(
-    generate_incompressible_intervals(
-        simplify_edge_multiples(
-            generate_interval_edges(layout, tol))), max_step)
+    interval_edges = generate_interval_edges(layout, tol)
+    simplified = simplify_edge_multiples(interval_edges)
+    incompressible_intervals = generate_incompressible_intervals(simplified)
+    xy = generate_compression_function_points(incompressible_intervals, max_step)
     return x -> evaluate_piecewise_linear(xy, x)
 end
 
@@ -1644,7 +1655,7 @@ function render(layout::BeamLayout, render_config::RenderConfig)
     
     layout_width = width(hinterval)
     layout_height = width(vinterval)
-    xf = compression_function(layout, layout_height)
+    xf = compression_function(layout, 1.25*layout_height)
     scale = render_config.output_beam_height/layout_height
 
     compressed_width = xf(hinterval.upper) - xf(hinterval.lower)
@@ -2236,16 +2247,18 @@ function make(dst_root::String, report::Report)
 
         n = length(layouts)
         for (i, layout) in enumerate(layouts)
+            title = @sprintf("Layout %d/%d", i, n)
             local_name = @sprintf("diagram%03d.svg", diagram_counter)
             diagram_svg_name = joinpath(dst_root, local_name)
             diagram_render_config = @set render_config.filename = diagram_svg_name
-            
+
+            println(string("LAYOUT ", title))
             annotations = render(layout, diagram_render_config)
             
             layout_nodes = Vector{DocNode}()
             push!(layout_nodes, annotation_table(annotations))
             push!(layout_nodes, DocImage(local_name, diagram_svg_name))
-            push!(specnodes, DocSection(@sprintf("Layout %d/%d", i, n), DocGroup(layout_nodes)))
+            push!(specnodes, DocSection(title, DocGroup(layout_nodes)))
             diagram_counter += 1
         end
         push!(doc, DocSection(title(beam_specs), DocGroup(specnodes)))

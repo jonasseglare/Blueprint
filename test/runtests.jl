@@ -521,9 +521,9 @@ end
            bp.IntervalEdge(0.6, 1),
            bp.IntervalEdge(0.75, -1)]
     dst = bp.simplify_edge_multiples(src)
-    @test 2 == length(dst)
+    @test 3 == length(dst)
     @test dst[1].position == 0.3
-    @test dst[2].position == 0.75
+    @test dst[2].position == 0.6
 end
 
 ## Optimize it
