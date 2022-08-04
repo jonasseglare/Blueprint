@@ -1,6 +1,14 @@
 # Insulation boards
 
-[See the full model](full_model.stl)
+
+
+* [[Full model]](full_model.stl)
+
+
+* [[Structure]](structure.stl)
+
+
+
 
 ## Square beam
 
@@ -41,12 +49,12 @@ Diagrams for nodes with these dimensions.
 | 2 | b | 2.510 | 0.040 |  |
 | 2 | Overall height |  |  | 0.040 |
 | 2 | Overall length |  |  | 2.500 |
-| 6 | g | 2.520 | 0.000 |  |
-| 6 | h | 2.520 | 0.040 |  |
-| 6 | f | 2.935 | 0.000 |  |
-| 6 | e | 2.935 | 0.040 |  |
+| 6 | f | 2.520 | 0.000 |  |
+| 6 | g | 2.520 | 0.040 |  |
+| 6 | e | 2.875 | 0.000 |  |
+| 6 | h | 2.875 | 0.040 |  |
 | 6 | Overall height |  |  | 0.040 |
-| 6 | Overall length |  |  | 0.415 |
+| 6 | Overall length |  |  | 0.355 |
 
 
 ![diagram001.svg](diagram001.svg)
@@ -61,12 +69,12 @@ Diagrams for nodes with these dimensions.
 | 3 | b | 2.510 | 0.040 |  |
 | 3 | Overall height |  |  | 0.040 |
 | 3 | Overall length |  |  | 2.500 |
-| 7 | g | 2.520 | 0.000 |  |
-| 7 | h | 2.520 | 0.040 |  |
-| 7 | f | 2.935 | 0.000 |  |
-| 7 | e | 2.935 | 0.040 |  |
+| 7 | f | 2.520 | 0.000 |  |
+| 7 | g | 2.520 | 0.040 |  |
+| 7 | e | 2.875 | 0.000 |  |
+| 7 | h | 2.875 | 0.040 |  |
 | 7 | Overall height |  |  | 0.040 |
-| 7 | Overall length |  |  | 0.415 |
+| 7 | Overall length |  |  | 0.355 |
 
 
 ![diagram002.svg](diagram002.svg)
@@ -75,18 +83,18 @@ Diagrams for nodes with these dimensions.
 
 | Beam | Label | X | Y | Length |
 |-|-|-|-|-|
-| 4 | c | 0.010 | 0.000 |  |
-| 4 | d | 0.010 | 0.040 |  |
-| 4 | b | 0.425 | 0.000 |  |
-| 4 | a | 0.425 | 0.040 |  |
+| 4 | b | 0.010 | 0.000 |  |
+| 4 | c | 0.010 | 0.040 |  |
+| 4 | a | 0.365 | 0.000 |  |
+| 4 | d | 0.365 | 0.040 |  |
 | 4 | Overall height |  |  | 0.040 |
-| 4 | Overall length |  |  | 0.415 |
-| 5 | g | 0.435 | 0.000 |  |
-| 5 | h | 0.435 | 0.040 |  |
-| 5 | f | 0.849 | 0.000 |  |
-| 5 | e | 0.849 | 0.040 |  |
+| 4 | Overall length |  |  | 0.355 |
+| 5 | f | 0.375 | 0.000 |  |
+| 5 | g | 0.375 | 0.040 |  |
+| 5 | e | 0.729 | 0.000 |  |
+| 5 | h | 0.729 | 0.040 |  |
 | 5 | Overall height |  |  | 0.040 |
-| 5 | Overall length |  |  | 0.415 |
+| 5 | Overall length |  |  | 0.355 |
 
 
 ![diagram003.svg](diagram003.svg)

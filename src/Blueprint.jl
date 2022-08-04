@@ -818,6 +818,10 @@ function get_tangent_plane(component::AbstractComponent, normal::Vector{Float64}
     return translate(plane, shift)
 end
 
+function get_tangent_cutting_plane(plane_key, component, normal_of_cutting_plane)
+    return NamedPlane(plane_key, flip(get_tangent_plane(component, -normal_of_cutting_plane)))
+end
+
 function push_component_against_component(target_component, push_direction, component_to_push)
     return push_against(flip(get_tangent_plane(target_component, push_direction)), component_to_push)
 end
@@ -871,6 +875,14 @@ end
 function cut(plane::NamedPlane, beam::Beam)
     polyhedron = add_plane(beam.polyhedron, plane.name, plane.plane)
     return refilter_annotations(@set beam.polyhedron = polyhedron)
+end
+
+function cut_many(planes, beam)
+    result = beam
+    for plane in planes
+        result = cut(plane, result)
+    end
+    return result
 end
 
 function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
@@ -1704,8 +1716,12 @@ end
 
 
 function group_sub!(dst, src::Group)
-    for x in src.components
-        group_sub!(dst, x)
+    if length(src.memberships) == 0
+        for x in src.components
+            group_sub!(dst, x)
+        end
+    else
+        push!(dst, src)
     end
 end
 
@@ -1766,6 +1782,7 @@ end
 
 function flatten(context::FlattenContext, group::Group, dst::Vector{AbstractContextualComponent})
     inner_context = FlattenContext(union(context.memberships, group.memberships))
+    #@info "Flatten group" length(group.components) context.memberships inner_context.memberships group.memberships
     for x in group.components
         flatten(inner_context, x, dst)
     end
@@ -1868,7 +1885,11 @@ struct ProjectedView
     z_range::Interval{Float64}
 end
 
-
+struct SubModel
+    label::String
+    filename::String
+    membership_predicate::Function
+end
 
 ################# Report
 struct Report
@@ -1876,10 +1897,19 @@ struct Report
     top_component::AbstractComponent
     views::Vector{ProjectedView}
     render_config::RenderConfig
+    sub_models::Vector{SubModel}
+end
+
+function set_sub_models(report, sub_models)
+    return @set report.sub_models = sub_models
+end
+
+function push_sub_model!(report, model)
+    push!(report.sub_models, model)
 end
 
 function basic_report(project_name::String, top_component::AbstractComponent, views::Vector{ProjectedView})
-    return Report(project_name, top_component, views, default_render_config)
+    return Report(project_name, top_component, views, default_render_config, Vector{SubModel}([SubModel("Full model", "full_model.stl", (memberships) -> true)]))
 end
 
 function basic_report(project_name::String, top_component::AbstractComponent)
@@ -1921,6 +1951,10 @@ struct DocParagraph <: DocNode
 end
 
 struct DocGroup <: DocNode
+    children::Vector{DocNode}
+end
+
+struct DocList <: DocNode
     children::Vector{DocNode}
 end
 
@@ -2034,6 +2068,16 @@ function render(node::DocTable, context::DocContext, dst::HtmlRenderer)
     write!(dst, "</table>")
 end
 
+function render(node::DocList, context::DocContext, dst::HtmlRenderer)
+    write!(dst, "<ul>")
+    for x in node.children
+        write!(dst, "<li>")
+        render(x, context, dst)
+        write!(dst, "</li>")        
+    end
+    write!(dst, "</ul>")    
+end
+
 function render(node::DocSection, context::DocContext, dst::HtmlRenderer)
     hl = @sprintf("h%d", context.section_level + 1)
     write!(dst, string("<", hl, ">", node.title, "</", hl, ">"))
@@ -2075,6 +2119,16 @@ end
 
 function render(node::DocParagraph, context::DocContext, dst::MarkdownRenderer)
     write!(dst, node.text)
+    write!(dst, "\n\n")
+end
+
+function render(node::DocList, context::DocContext, dst::MarkdownRenderer)
+    write!(dst, "\n\n")
+    for x in node.children
+        write!(dst, "* ")
+        render(x, context, dst)
+        write!(dst, "\n")
+    end
     write!(dst, "\n\n")
 end
 
@@ -2127,13 +2181,14 @@ function make(dst_root::String, report::Report)
     mkpath(dst_root)
     doc = Vector{DocNode}()
 
-    stl_name = "full_model.stl"
-    stl_path = joinpath(dst_root, stl_name)
-    mesh = make_mesh(report.top_component)
-    render_stl(stl_path, mesh)
+    function produce_model(model)
+        stl_path = joinpath(dst_root, model.filename)
+        mesh = make_mesh(report.top_component, model.membership_predicate)
+        render_stl(stl_path, mesh)
+        return DocLink(string("[", model.label, "]"), model.filename)
+    end
+    push!(doc, DocList([produce_model(model) for model in report.sub_models]))
 
-    model_link = DocLink("See the full model", stl_name)
-    push!(doc, model_link)
 
     diagram_counter = 0
     beams = get_beams(report.top_component)
@@ -2259,13 +2314,19 @@ function make_mesh(builder::MeshBuilder)
     return Mesh(builder.vertices, builder.triangles)
 end
 
-function make_mesh(component::AbstractComponent)
+function make_mesh(component::AbstractComponent, membership_pred_fn)
     builder = make_empty_meshbuilder()
     contextual_components = flatten(component)
     for cc in contextual_components
-        visit(cc.component, builder)
+        if membership_pred_fn(cc.memberships)
+            visit(cc.component, builder)
+        end
     end
     return make_mesh(builder)
+end
+
+function make_mesh(component::AbstractComponent)
+    return make_mesh(component, (memberships) -> true)
 end
 
 function stl_format_float(x)
