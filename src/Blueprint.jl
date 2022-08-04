@@ -1908,6 +1908,10 @@ function push_sub_model!(report, model)
     push!(report.sub_models, model)
 end
 
+function push_view!(report, view)
+    push!(report.views, view)
+end
+
 function basic_report(project_name::String, top_component::AbstractComponent, views::Vector{ProjectedView})
     return Report(project_name, top_component, views, default_render_config, Vector{SubModel}([SubModel("Full model", "full_model.stl", (memberships) -> true)]))
 end

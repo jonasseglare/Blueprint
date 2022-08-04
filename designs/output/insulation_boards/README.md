@@ -10,6 +10,14 @@
 
 
 
+## Projected Views
+
+### View from above
+
+![projview001.svg](projview001.svg)
+### Side view
+
+![projview002.svg](projview002.svg)
 ## Square beam
 
 Diagrams for nodes with these dimensions.
