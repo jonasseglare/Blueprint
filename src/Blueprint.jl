@@ -897,6 +897,7 @@ function cut_many(planes, beam)
     return result
 end
 
+# Compute drilling direction for connecting two beams crossing each other
 function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
     first_dir = beam_dir(first_beam)
     second_dir = beam_dir(second_beam)
@@ -911,6 +912,7 @@ function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
     end
 end
 
+# When drilling into the side of the beam, which is the dimension (local beam X or Y) given world drilling direction?
 function base_drilling_dim(beam::Beam, drilling_dir::Vector{Float64})
     local_drilling_dir = normalize(transform_direction(invert(beam.transform), drilling_dir))
     if abs(dot(local_drilling_dir, local_x_dir)) < abs(dot(local_drilling_dir, local_y_dir))
