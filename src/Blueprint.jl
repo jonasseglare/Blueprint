@@ -2054,6 +2054,11 @@ function annotation_table(annotations::Vector{DiagramAnnotation})
     return DocTable(header, rows)
 end
 
+function beam_table(contextual_beams)
+    rows = [TableRow([string(c.index), join([string(s) for s in c.memberships], ", ")]) for c in contextual_beams]
+    return DocTable(TableRow(["Beam", "Memberships"]), Vector{TableRow}(rows))
+end
+
 struct HtmlRenderer
     file
 end
@@ -2241,6 +2246,12 @@ function make(dst_root::String, report::Report)
 
     diagram_counter = 0
     beams = get_beams(report.top_component)
+
+    index2beam = Dict{Integer, ContextualBeam}()
+    for beam in beams
+        index2beam[beam.index] = beam
+    end
+    
     groups = group_by_specs(beams)
     packed_layouts = pack_plans(groups)
 
@@ -2269,9 +2280,12 @@ function make(dst_root::String, report::Report)
             diagram_svg_name = joinpath(dst_root, local_name)
             diagram_render_config = @set render_config.filename = diagram_svg_name
             annotations = render(layout, diagram_render_config)
+            beam_indices = sort([plan.beam_index for plan in layout.plans])
+            layout_beams = [index2beam[i] for i in beam_indices]
             layout_nodes = Vector{DocNode}()
             push!(layout_nodes, annotation_table(annotations))
             push!(layout_nodes, DocImage(local_name, diagram_svg_name))
+            push!(layout_nodes, beam_table(layout_beams))
             push!(specnodes, DocSection(title, DocGroup(layout_nodes)))
             diagram_counter += 1
         end

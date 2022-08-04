@@ -42,6 +42,13 @@ Diagrams for nodes with these dimensions.
 
 
 ![diagram000.svg](diagram000.svg)
+
+| Beam | Memberships |
+|-|-|
+| 8 | alignment, structure |
+| 9 | alignment, structure |
+
+
 ## Strong beam
 
 Diagrams for nodes with these dimensions.
@@ -66,6 +73,13 @@ Diagrams for nodes with these dimensions.
 
 
 ![diagram001.svg](diagram001.svg)
+
+| Beam | Memberships |
+|-|-|
+| 2 | main_support, structure |
+| 6 | connecting_beams, structure |
+
+
 ### Layout 2/3
 
 
@@ -86,6 +100,13 @@ Diagrams for nodes with these dimensions.
 
 
 ![diagram002.svg](diagram002.svg)
+
+| Beam | Memberships |
+|-|-|
+| 3 | main_support, structure |
+| 7 | connecting_beams, structure |
+
+
 ### Layout 3/3
 
 
@@ -106,6 +127,13 @@ Diagrams for nodes with these dimensions.
 
 
 ![diagram003.svg](diagram003.svg)
+
+| Beam | Memberships |
+|-|-|
+| 4 | connecting_beams, structure |
+| 5 | connecting_beams, structure |
+
+
 ## Plywood sheet
 
 Diagrams for nodes with these dimensions.
@@ -124,6 +152,12 @@ Diagrams for nodes with these dimensions.
 
 
 ![diagram004.svg](diagram004.svg)
+
+| Beam | Memberships |
+|-|-|
+| 0 | covers |
+
+
 ### Layout 2/2
 
 
@@ -138,3 +172,9 @@ Diagrams for nodes with these dimensions.
 
 
 ![diagram005.svg](diagram005.svg)
+
+| Beam | Memberships |
+|-|-|
+| 1 | covers |
+
+

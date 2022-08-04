@@ -70,7 +70,7 @@ function inner_insulation_board(offset)
     close_inner = bp.get_tangent_cutting_plane(:close_inner, close_beam, [0.0, 1.0, 0.0])
     far_inner = bp.get_tangent_cutting_plane(:far_inner, far_beam, [0.0, -1.0, 0.0])
 
-    connecting_beams = bp.cut_many([close_inner, far_inner], bp.beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4))
+    connecting_beams = bp.with_memberships(bp.cut_many([close_inner, far_inner], bp.beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4)), :connecting_beams)
 
     plywood_sheet_proto = shelf_cut(cut_close_far(bp.orient_beam(bp.new_beam(plywood_sheet_specs), [1.0, 0.0, 0.0], bp.local_y_dir)))
     
@@ -83,8 +83,11 @@ function inner_insulation_board(offset)
     left_alignment_beam = bp.push_against(left_wall_marg, alignment_beam_proto)
     right_alignment_beam = bp.push_against(right_wall_marg, alignment_beam_proto)
 
+    alignment_beams = bp.membership_group(:alignment, [left_alignment_beam, right_alignment_beam])
+    
     covers = bp.membership_group(:covers, [plywood_sheet_above, plywood_sheet_under])
-    structure = bp.membership_group(:structure, [close_beam, far_beam, connecting_beams, left_alignment_beam, right_alignment_beam])
+    support_beams = bp.membership_group(:main_support, [close_beam, far_beam])
+    structure = bp.membership_group(:structure, [support_beams, connecting_beams, alignment_beams])
     result = bp.group([covers, structure])
     return result
 end
