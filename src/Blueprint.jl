@@ -2055,6 +2055,7 @@ function annotation_table(annotations::Vector{DiagramAnnotation})
 end
 
 function beam_table(contextual_beams)
+    common_memberships = reduce(Base.intersect, [c.memberships for c in contextual_beams])
     rows = [TableRow([string(c.index), join([string(s) for s in c.memberships], ", ")]) for c in contextual_beams]
     return DocTable(TableRow(["Beam", "Memberships"]), Vector{TableRow}(rows))
 end
