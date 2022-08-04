@@ -1883,12 +1883,13 @@ struct ProjectedView
     plane::Plane{Float64}
     diagram_x_vec::Vector{Float64}
     z_range::Interval{Float64}
+    membership_predicate_fn::Function
 end
 
 struct SubModel
     label::String
     filename::String
-    membership_predicate::Function
+    membership_predicate_fn::Function
 end
 
 ################# Report
@@ -1912,8 +1913,24 @@ function push_view!(report, view)
     push!(report.views, view)
 end
 
+function any_membership(memberships)
+    return true
+end
+
+function member_of_union(sets...)
+    function predicate(memberships)
+        for x in sets
+            if x in memberships
+                return true
+            end
+        end
+        return false
+    end
+    return predicate
+end
+
 function basic_report(project_name::String, top_component::AbstractComponent, views::Vector{ProjectedView})
-    return Report(project_name, top_component, views, default_render_config, Vector{SubModel}([SubModel("Full model", "full_model.stl", (memberships) -> true)]))
+    return Report(project_name, top_component, views, default_render_config, Vector{SubModel}([SubModel("Full model", "full_model.stl", any_membership)]))
 end
 
 function basic_report(project_name::String, top_component::AbstractComponent)
@@ -2187,7 +2204,7 @@ function make(dst_root::String, report::Report)
 
     function produce_model(model)
         stl_path = joinpath(dst_root, model.filename)
-        mesh = make_mesh(report.top_component, model.membership_predicate)
+        mesh = make_mesh(report.top_component, model.membership_predicate_fn)
         render_stl(stl_path, mesh)
         return DocLink(string("[", model.label, "]"), model.filename)
     end
@@ -2330,7 +2347,7 @@ function make_mesh(component::AbstractComponent, membership_pred_fn)
 end
 
 function make_mesh(component::AbstractComponent)
-    return make_mesh(component, (memberships) -> true)
+    return make_mesh(component, any_membership)
 end
 
 function stl_format_float(x)
@@ -2460,7 +2477,9 @@ function render_projected_view(view::ProjectedView, component::AbstractComponent
 
     projected_components = Vector{ProjectedComponent}()
     for contextual_component in components
-        project(view, RT, contextual_component, projected_components)
+        if view.membership_predicate_fn(contextual_component.memberships)
+            project(view, RT, contextual_component, projected_components)
+        end
     end
 
     bbox = compute_bbox([x.bbox for x in projected_components])
@@ -2545,7 +2564,7 @@ function demo2()
     plane = get_tangent_plane(full_design, -world_up)
     diagram_x_vec = beam_dir(beam0)
 
-    view = ProjectedView("From top", plane, diagram_x_vec, DefinedInterval{Float64}(-0.1, 0.1))
+    view = ProjectedView("From top", plane, diagram_x_vec, DefinedInterval{Float64}(-0.1, 0.1), any_membership)
     #render_projected_view(view, full_design, @set default_render_config.preview = true)
 
     report = basic_report("Just a sketch", full_design, [view])

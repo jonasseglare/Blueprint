@@ -93,8 +93,8 @@ end
 function render()
     full_design = bp.group(inner_insulation_board(0))
 
-    vertical_view = bp.ProjectedView("View from above", bp.flip(base), [1.0, 0.0, 0.0], nothing)
-    side_view = bp.ProjectedView("Side view", bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]), [1.0, 0.0, 0.0], nothing)
+    vertical_view = bp.ProjectedView("View from above", bp.flip(base), [1.0, 0.0, 0.0], nothing, bp.member_of_union(:structure))
+    side_view = bp.ProjectedView("Side view", bp.plane_at_pos([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]), [1.0, 0.0, 0.0], nothing, bp.member_of_union(:structure))
     
     report = bp.basic_report("Insulation boards", full_design)
     bp.push_sub_model!(report, bp.SubModel("Structure", "structure.stl", (memberships) -> :structure in memberships))
