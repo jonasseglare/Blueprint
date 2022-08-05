@@ -2458,6 +2458,7 @@ function make(dst_root::String, report::Report)
         end
         push!(doc, DocSection(title(beam_specs), DocGroup(specnodes)))
     end
+    push!(doc, DocSection("About", DocLink("This design was generated using Blueprint.", "https://github.com/jonasseglare/Blueprint")))
     return DocInit(dst_root, report.project_name, DocSection(report.project_name, DocGroup(doc)))
 end
 

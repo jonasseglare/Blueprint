@@ -239,3 +239,7 @@ Diagrams for nodes with these dimensions.
 | 1 | covers |
 
 
+## About
+
+[This design was generated using Blueprint.](https://github.com/jonasseglare/Blueprint)
+
