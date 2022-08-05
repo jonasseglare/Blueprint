@@ -396,7 +396,7 @@ end
     A_planes = bp.generate_drilling_planes(A, dp_specs, dir)
     B_planes = bp.generate_drilling_planes(B, dp_specs, dir)
 
-    drills = bp.generate_drills(dir, A_planes, B_planes, bp.DrillSpecs(0))
+    drills = bp.generate_drills(dir, A_planes, B_planes, bp.basic_drill_specs(0))
 
     @test 4 == length(drills)
     
@@ -452,7 +452,7 @@ end
     
     beam_planes = bp.generate_drilling_planes(beam, dpspecs, drilling_dir)
     cut_planes = bp.generate_drilling_planes(bp.mid_point(beam), a.plane, b.plane, dpspecs)
-    drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes, bp.DrillSpecs(0))
+    drills = bp.generate_drills(drilling_dir, beam_planes, cut_planes, bp.basic_drill_specs(0))
 
     beam = bp.ContextualBeam(bp.drill(beam, drills), -1, PersistentSet{Any}())
     
@@ -467,9 +467,9 @@ end
 @testset "Unique index test" begin
     bp = Blueprint
     m = Dict{bp.LabelSpec, Integer}()
-    @test bp.generate_unique_index(m, bp.drill_label_spec) == 0
-    @test bp.generate_unique_index(m, bp.drill_label_spec) == 1
-    @test bp.generate_unique_index(m, bp.drill_label_spec) == 2
+    @test bp.generate_unique_index(m, bp.default_drill_label_spec) == 0
+    @test bp.generate_unique_index(m, bp.default_drill_label_spec) == 1
+    @test bp.generate_unique_index(m, bp.default_drill_label_spec) == 2
 end
 
 @testset "Project" begin

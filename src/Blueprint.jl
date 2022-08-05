@@ -19,6 +19,25 @@ const PlaneKeyTuple2 = Tuple{PlaneKey, PlaneKey}
 const PlaneKeyTuple3 = Tuple{PlaneKey, PlaneKey, PlaneKey}
 const Vector64 = Vector{Float64}
 
+const x_vector_3d = [1.0, 0.0, 0.0]
+const y_vector_3d = [0.0, 1.0, 0.0]
+const z_vector_3d = [0.0, 0.0, 1.0]
+
+struct LineKM{T}
+    k::T
+    m::T
+end
+
+function (line::LineKM{T})(x) where {T}
+    return line.k*x + line.m
+end
+
+function fit_line(x0::T, x1::T, y0::T, y1::T)::LineKM{T} where {T}
+    k = (y1 - y0)/(x1 - x0)
+    m = y0 - k*x0
+    return LineKM{T}(k, m)
+end
+
 struct DefinedInterval{T}
     lower::T
     upper::T
@@ -108,6 +127,10 @@ end
 
 function translate(plane::Plane{T}, amount::T) where {T}
     return Plane{T}(plane.normal, plane.offset + amount)
+end
+
+function set_offset(plane::Plane{T}, offset::T) where {T}
+    return Plane{T}(plane.normal, offset)
 end
 
 function translate_normalized(plane::Plane{T}, amount::T) where {T}
@@ -675,6 +698,10 @@ struct LabelSpec
     short::String
 end
 
+function append_text(label_spec::LabelSpec, text, short="")
+    return LabelSpec(string(label_spec.text, text), string(label_spec.short, short))
+end
+
 struct Label
     spec::LabelSpec
     counter::Integer
@@ -849,6 +876,49 @@ function beam_array_between_planes(start_plane, end_plane, beam_prototype, count
     return group([transform(rigid_transform_from_translation(start_translation + step*i), beam_prototype) for i in 0:step_count])
 end
 
+struct Pinch
+    lower_plane::Plane{Float64}
+    upper_offset::Float64
+end
+
+function lower_plane(pinch::Pinch)
+    return pinch.lower_plane
+end
+
+function upper_plane(pinch::Pinch)
+    return flip(set_offset(pinch.lower_plane, pinch.upper_offset))
+end
+
+function pinch_component(component, pinch_dir)
+    lower_plane = get_tangent_plane(component, pinch_dir)
+    upper_temp = flip(get_tangent_plane(component, -pinch_dir))
+    upper_offset = upper_temp.offset
+    result = Pinch(lower_plane, upper_offset)
+    return result
+end
+
+function pinch_beam(beam::Beam, pinch_dir::Vector{Float64}) where {Float64}
+    bd = normalize(beam_dir(beam))
+    normal = orthonormalize(pinch_dir, bd)
+    return pinch_component(beam, normal)
+end
+
+function pinch_beams(component, pinch_dir::Vector{Float64})
+    return [pinch_beam(beam.component, pinch_dir) for beam in flatten(component) if typeof(beam) == ContextualBeam]
+end
+
+function spaced_planes(pinch::Pinch, n, marg=0.5)
+    @assert 1 <= n
+    lower_offset = pinch.lower_plane.offset
+    upper_offset = pinch.upper_offset
+    line = fit_line(-marg, n-1+marg, lower_offset, upper_offset)
+    return [set_offset(pinch.lower_plane, line(i)) for i in 0:(n-1)]
+end
+
+function spaced_planes(pinches::Vector{Pinch}, n, marg=0.5)
+    return [plane for pinch in pinches for plane in spaced_planes(pinch, n, marg)]
+end
+
 struct NamedPlane
     name::PlaneKey
     plane::Plane{Float64}
@@ -897,6 +967,7 @@ function cut_many(planes, beam)
     return result
 end
 
+# Compute drilling direction for connecting two beams crossing each other
 function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
     first_dir = beam_dir(first_beam)
     second_dir = beam_dir(second_beam)
@@ -911,6 +982,7 @@ function compute_drilling_direction(first_beam::Beam, second_beam::Beam)
     end
 end
 
+# When drilling into the side of the beam, which is the dimension (local beam X or Y) given world drilling direction?
 function base_drilling_dim(beam::Beam, drilling_dir::Vector{Float64})
     local_drilling_dir = normalize(transform_direction(invert(beam.transform), drilling_dir))
     if abs(dot(local_drilling_dir, local_x_dir)) < abs(dot(local_drilling_dir, local_y_dir))
@@ -986,14 +1058,24 @@ function generate_unique_index(m::Dict{K, Integer}, k::K) where {K}
     return i   
 end
 
-const drill_label_spec = LabelSpec("Drill", "D")
-
 struct DrillSpecs <: AnnotationData
     radius::Number
+    label::LabelSpec
+    include_enter::Bool
+    include_exit::Bool
+end
+
+const default_drill_label_spec = LabelSpec("Drill", "D")
+
+function basic_drill_specs(radius::Number=0.0)
+    return DrillSpecs(radius, default_drill_label_spec, true, false)
+end
+
+function set_label(specs::DrillSpecs, label::LabelSpec)
+    return @set specs.label = label
 end
 
 struct Drilling
-    label_spec::LabelSpec
     line::ParameterizedLine{Float64}
     specs::DrillSpecs
 end
@@ -1002,14 +1084,8 @@ function generate_drills(drilling_dir::Vector{Float64},
     a_planes::Vector{Plane{Float64}},
     b_planes::Vector{Plane{Float64}},
     specs::DrillSpecs)::Vector{Drilling}
-    
-    dst = Vector{Drilling}()
-    for a in a_planes
-        for b in b_planes
-            push!(dst, Drilling(drill_label_spec, direct_like(intersect(a, b), drilling_dir), specs))
-        end
-    end
-    return dst
+    return Vector{Drilling}([Drilling(direct_like(intersect(a, b), drilling_dir), specs)
+                             for a in a_planes for b in b_planes])
 end
 
 function drill(beam::Beam, drills::AbstractVector{Drilling})
@@ -1019,11 +1095,19 @@ function drill(beam::Beam, drills::AbstractVector{Drilling})
         dst = get(beam.annotations, plane_key, pvec(Vector{Annotation}()))
         counters = Dict{LabelSpec, Integer}()
         for drill in drills
-            if dot(drill.line.dir, plane.normal) > 0
+            s = dot(drill.line.dir, plane.normal)
+            is_enter = s > 0
+            is_exit = s < 0
+            if (is_enter && drill.specs.include_enter) || (is_exit && drill.specs.include_exit)
                 intersection = intersect(plane, drill.line)
                 if exists(intersection)
-                    counter = generate_unique_index(counters, drill.label_spec)
-                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), Label(drill.label_spec, counter), drill.specs))
+                    counter = generate_unique_index(counters, drill.specs.label)
+                    label_specs = if is_enter
+                        append_text(drill.specs.label, "-enter", "(")
+                    else
+                        append_text(drill.specs.label, "-exit", ")")
+                    end
+                    dst = push(dst, Annotation(evaluate(drill.line, intersection.lambda), Label(label_specs, counter), drill.specs))
                 end
             end
         end
@@ -1232,23 +1316,7 @@ struct RenderConfig
     projected_view_height::Float64
 end
 
-const default_render_config = RenderConfig(20, 5, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5, 800, 600)
-
-struct LineKM{T}
-    k::T
-    m::T
-end
-
-function (line::LineKM{T})(x) where {T}
-    return line.k*x + line.m
-end
-
-function fit_line(x0::T, x1::T, y0::T, y1::T)::LineKM{T} where {T}
-    k = (y1 - y0)/(x1 - x0)
-    m = y0 - k*x0
-    return LineKM{T}(k, m)
-end
-
+const default_render_config = RenderConfig(20, 1, 100, 30, "/tmp/blueprint_sketch.pdf", true, 5, 800, 600)
 
 
 function solve_plane_key(ikey::PlaneKeyTuple3, jkey::PlaneKeyTuple3)
@@ -1645,6 +1713,7 @@ abstract type DiagramAnnotation end
 struct DiagramPoint <: DiagramAnnotation
     label::AnnotationLabel
     position::Vector{Float64}
+    comment::String
 end
 
 struct DiagramDistance <: DiagramAnnotation
@@ -1658,6 +1727,10 @@ end
 
 function annotation_order(d::DiagramDistance)
     return (1, d.distance, 0.0)
+end
+
+function user_data_comment(dspecs::DrillSpecs)
+    return string(dspecs.label.text, ", radius = ", dspecs.radius)
 end
 
 # Rendering plans
@@ -1704,7 +1777,7 @@ function render(layout::BeamLayout, render_config::RenderConfig)
         corner_labels = list_annotation_labels(plan.beam_index, corner_digits, hor(corner_count, length(plan.corners)))
 
         for (label, corner) in zip(corner_labels, plan.corners)
-            push!(sub_annotations, DiagramPoint(label, corner.position))
+            push!(sub_annotations, DiagramPoint(label, corner.position, ""))
         end
         push!(sub_annotations, DiagramDistance(AnnotationLabel(
             plan.beam_index, "Overall length"), width(plan.bbox.intervals[1])))
@@ -1712,6 +1785,10 @@ function render(layout::BeamLayout, render_config::RenderConfig)
             plan.beam_index, "Overall height"), width(plan.bbox.intervals[2])))
         
         annotation_labels = list_annotation_labels(plan.beam_index, annotation_digits, hor(annotation_count, length(plan.annotations)))
+        for (label, annot) in zip(annotation_labels, plan.annotations)
+            push!(sub_annotations, DiagramPoint(label, annot.position, user_data_comment(annot.data)))
+        end
+
         slopes = corner_label_orientation.(mid, positions)
         lx.label.([short_string(label) for label in corner_labels], slopes, positions, offset=offset)
         apos = [pt(annotation.position) for annotation in plan.annotations]
@@ -1789,7 +1866,7 @@ end
 # Operations on groups
 
 function transform(rigid_transform::RigidTransform{Float64}, src::Group)
-    return group([transform(rigid_transform, component) for component in src.components])
+    return @set src.components = [transform(rigid_transform, component) for component in src.components]
 end
 
 function push_bounding_points!(dst::Vector{Vector{Float64}}, group::Group)
@@ -1798,8 +1875,12 @@ function push_bounding_points!(dst::Vector{Vector{Float64}}, group::Group)
     end
 end
 
-function cut(plane::NamedPlane, beamgroup::Group)
-    return group([cut(plane, x) for x in beamgroup.components])
+function cut(plane::NamedPlane, group::Group)
+    return @set group.components = [cut(plane, x) for x in group.components]
+end
+
+function drill(group::Group, drills::AbstractVector{Drilling})
+    return @set group.components = [drill(c, drills) for c in group.components]
 end
 
 ### Pushing the beams
@@ -2038,15 +2119,15 @@ end
 function annotation_row(pt::DiagramPoint)
     return TableRow([pt.label.beam_index, pt.label.label,
                      format_measure(pt.position[1]),
-                     format_measure(pt.position[2]), ""])
+                     format_measure(pt.position[2]), "", pt.comment])
 end
 
 function annotation_row(d::DiagramDistance)
-    return TableRow([d.label.beam_index, d.label.label, nothing, nothing, format_measure(d.distance)])
+    return TableRow([d.label.beam_index, d.label.label, nothing, nothing, format_measure(d.distance), ""])
 end
 
 function annotation_table(annotations::Vector{DiagramAnnotation})
-    header = TableRow(["Beam", "Label", "X", "Y", "Length"])
+    header = TableRow(["Beam", "Label", "X", "Y", "Length", "Comment"])
     rows = Vector{TableRow}()
     for annotation in annotations
         push!(rows, annotation_row(annotation))
@@ -2054,9 +2135,10 @@ function annotation_table(annotations::Vector{DiagramAnnotation})
     return DocTable(header, rows)
 end
 
-function beam_table(contextual_beams)
-    rows = [TableRow([string(c.index), join([string(s) for s in c.memberships], ", ")]) for c in contextual_beams]
-    return DocTable(TableRow(["Beam", "Memberships"]), Vector{TableRow}(rows))
+function component_table(contextual_components)
+    common_memberships = reduce(Base.intersect, [c.memberships for c in contextual_components])
+    rows = [TableRow([string(c.index), join([string(s) for s in c.memberships], ", ")]) for c in contextual_components]
+    return DocTable(TableRow(["Index", "Memberships"]), Vector{TableRow}(rows))
 end
 
 struct HtmlRenderer
@@ -2239,10 +2321,9 @@ function make(dst_root::String, report::Report)
         stl_path = joinpath(dst_root, model.filename)
         mesh = make_mesh(report.top_component, model.membership_predicate_fn)
         render_stl(stl_path, mesh)
-        return DocLink(string("[", model.label, "]"), model.filename)
+        return DocLink(model.label, model.filename)
     end
     push!(doc, DocList([produce_model(model) for model in report.sub_models]))
-
 
     diagram_counter = 0
     beams = get_beams(report.top_component)
@@ -2269,6 +2350,9 @@ function make(dst_root::String, report::Report)
         push!(doc, DocSection("Projected Views", DocGroup(viewnodes)))
     end
 
+    all_components = flatten(report.top_component)
+    push!(doc, DocSection("Components", component_table(all_components)))
+    
     for (beam_specs, layouts) in sorted_layouts
         specnodes = Vector{DocNode}()
         push!(specnodes, DocParagraph("Diagrams for nodes with these dimensions."))
@@ -2285,7 +2369,7 @@ function make(dst_root::String, report::Report)
             layout_nodes = Vector{DocNode}()
             push!(layout_nodes, annotation_table(annotations))
             push!(layout_nodes, DocImage(local_name, diagram_svg_name))
-            push!(layout_nodes, beam_table(layout_beams))
+            push!(layout_nodes, component_table(layout_beams))
             push!(specnodes, DocSection(title, DocGroup(layout_nodes)))
             diagram_counter += 1
         end
@@ -2498,7 +2582,7 @@ function render_projected_component(pt, pc::ProjectedBeam, render_config::Render
             push!(all_positions, x)
         end
     end
-    apos = [pt(annotation.position) for annotation in beam.annotations]
+    apos = [pt(annotation.position) for plane_key in pc.plane_keys for annotation in get(beam.annotations, plane_key, [])]
     lx.circle.(apos, render_config.marker_size, :fill)
     #lower_right = argmax(pos -> pos.x + pos.y, all_positions)
     bbox = compute_bbox(all_positions)

@@ -72,6 +72,16 @@ function inner_insulation_board(offset)
 
     connecting_beams = bp.with_memberships(bp.cut_many([close_inner, far_inner], bp.beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4)), :connecting_beams)
 
+    x_drill_planes = bp.spaced_planes(bp.pinch_beams(connecting_beams, bp.x_vector_3d), 1)
+    z_drill_planes = bp.spaced_planes(bp.pinch_component(connecting_beams, bp.z_vector_3d), 2, 0.7)
+
+    drill_radius = 0.003
+    common_drill_specs = bp.DrillSpecs(drill_radius, bp.LabelSpec("Common drill", "C"), true, true)
+    
+    close_conbeam_drills = bp.generate_drills(bp.y_vector_3d, x_drill_planes, z_drill_planes, common_drill_specs)
+    
+    connecting_beams = bp.drill(connecting_beams, close_conbeam_drills)
+
     plywood_sheet_proto = shelf_cut(cut_close_far(bp.orient_beam(bp.new_beam(plywood_sheet_specs), [1.0, 0.0, 0.0], bp.local_y_dir)))
     
     down = [0.0, 0.0, -1.0]
@@ -86,7 +96,8 @@ function inner_insulation_board(offset)
     alignment_beams = bp.membership_group(:alignment, [left_alignment_beam, right_alignment_beam])
     
     covers = bp.membership_group(:covers, [plywood_sheet_above, plywood_sheet_under])
-    support_beams = bp.membership_group(:main_support, [close_beam, far_beam])
+    support_beams = bp.drill(bp.membership_group(:main_support, [close_beam, far_beam]), close_conbeam_drills)
+    
     structure = bp.membership_group(:structure, [support_beams, connecting_beams, alignment_beams])
     result = bp.group([covers, structure])
     return result
