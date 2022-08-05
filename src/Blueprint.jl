@@ -1488,7 +1488,8 @@ function push_plan_against_loop(ref_loop, plan_to_push, margin)
     return transform(rigid_transform_from_translation((amount - margin)*loop_pushing_dir), plan_to_push)
 end
 
-function layout_from_one_plan(plan::BeamCuttingPlan, margin)
+function layout_from_one_plan(plan0::BeamCuttingPlan, margin)
+    plan = align_plan(plan0)
     return BeamLayout(2*margin + plan_length(plan::BeamCuttingPlan),
     Vector{BeamCuttingPlan}([push_plan_against_loop(stop_loop, plan, margin)]))
 end
@@ -2027,7 +2028,7 @@ function make_diagrams(strategy::BasicDiagramStrategy, beam_specs::BeamSpecs, cb
     if strategy.mode == :packed
         return pack([cplan(cbeam) for cbeam in cbeams if has_plane0(cbeam)], beam_specs.length, strategy.margin)
     elseif strategy.mode == :individual || strategy.mode == :individual_first
-        all_layouts = [layout_from_one_plan(cplan(cbeam), strategy.margin) for cbeam in cbeams if has_plane0(cbeam)]
+        all_layouts = [layout_from_one_plan(cplan(cbeam), 0) for cbeam in cbeams if has_plane0(cbeam)]
         if strategy.mode == :individual_first
             return [all_layouts[1]]
         else
@@ -2405,7 +2406,7 @@ function make(dst_root::String, report::Report)
         render_stl(stl_path, mesh)
         return DocLink(model.label, model.filename)
     end
-    push!(doc, DocList([produce_model(model) for model in report.sub_models]))
+    push!(doc, DocSection("3D Models", DocList([produce_model(model) for model in report.sub_models])))
 
     diagram_counter = 0
     beams = get_beams(report.top_component)

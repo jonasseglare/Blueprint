@@ -1,5 +1,7 @@
 # Insulation boards
 
+## 3D Models
+
 
 
 * [Full model](full_model.stl)
@@ -75,12 +77,12 @@ Diagrams for nodes with these dimensions.
 
 | Beam | Label | X | Y | Length | Comment |
 |-|-|-|-|-|-|
-| 4 | d | 0.010 | -0.020 |  |  |
-| 4 | a | 0.010 | 0.020 |  |  |
-| 4 | A | 0.025 | -0.008 |  | Common drill, radius = 0.003 |
-| 4 | B | 0.025 | 0.008 |  | Common drill, radius = 0.003 |
-| 4 | c | 0.040 | -0.020 |  |  |
-| 4 | b | 0.040 | 0.020 |  |  |
+| 4 | d | 0.000 | 0.000 |  |  |
+| 4 | a | 0.000 | 0.040 |  |  |
+| 4 | A | 0.015 | 0.012 |  | Common drill, radius = 0.003 |
+| 4 | B | 0.015 | 0.028 |  | Common drill, radius = 0.003 |
+| 4 | c | 0.030 | 0.000 |  |  |
+| 4 | b | 0.030 | 0.040 |  |  |
 | 4 | Overall length |  |  | 0.030 |  |
 | 4 | Overall height |  |  | 0.040 |  |
 
