@@ -633,12 +633,22 @@ end
 
 abstract type DiagramStrategy end
 
-struct PackedDiagramStrategy <: DiagramStrategy
+struct BasicDiagramStrategy <: DiagramStrategy
+    mode::Symbol # :packed, :individual or :first_individual
+    
     # Margin between pieces when producing a BeamLayout
     margin::Real
 
     # The side of the beam used for the plan
     cutting_plan_key::Symbol
+
+    diagram_x_dir::Vector{Float64}
+    
+    individual_class::Any
+end
+
+struct CompositeDiagramStrategy <: DiagramStrategy
+    strategies::Vector{DiagramStrategy}
 end
 
 # Common properties for beams when they are constructed
@@ -680,13 +690,26 @@ end
 default_beam_length = 3.0
 default_beam_color = RgbColor(0.0, 0.0, 1.0)
 default_beam_margin = 0.01
+default_diagram_strategy = BasicDiagramStrategy(:packed, default_beam_margin, beam_X_lower, local_beam_dir, nothing)
+
+function basic_diagram_strategy(mode, plane_key=beam_X_lower, dir=local_beam_dir)
+    return BasicDiagramStrategy(mode, default_beam_margin, plane_key, dir, nothing)
+end    
+
 
 function beam_specs(Xsize::Real, Ysize::Real)
     return BeamSpecs(
     Xsize, Ysize, default_beam_color, true,
-    default_beam_length, PackedDiagramStrategy(
-        default_beam_margin, beam_X_lower),
+    default_beam_length, default_diagram_strategy,
     nothing, 0, "")
+end
+
+function set_diagram_strategies(dst::BeamSpecs, strategies...)
+    return @set dst.diagram_strategy = if length(strategies) == 1
+        strategies[1]
+    else
+        CompositeDiagramStrategy(Vector{DiagramStrategy}(collect(strategies)))
+    end
 end
 
 function quadratic_beam_specs(size::Real)
@@ -753,8 +776,12 @@ function has_corners(beam::Beam)
     return has_corners(beam.polyhedron)
 end
 
+function from_local_beam_vector(beam::Beam, local_vector)
+    return transform_direction(beam.transform, local_vector)
+end
+
 function beam_dir(beam::Beam)
-    return transform_direction(beam.transform, local_beam_dir)
+    return from_local_beam_vector(beam, local_beam_dir)
 end
 
 function orthogonalize(target, reference)
@@ -1249,6 +1276,10 @@ function compute_corner_loop_keys(polyhedron::Polyhedron, k::PlaneKey)
     return [ordered_triplet(pair, k) for pair in compute_corner_loop(plane_corner_keys(polyhedron, k))]
 end
 
+function has_plane(beam::Beam, k)
+    return haskey(beam.polyhedron.planes, k)
+end
+
 function cutting_plan(
     # The beam for which to generate a plane
     cbeam::ContextualBeam,
@@ -1257,12 +1288,13 @@ function cutting_plan(
     k::PlaneKey,
 
     # The direction of the beam
-    specified_beam_dir::Vector{Float64})
+    local_beam_dir::Vector{Float64})
 
+    specified_beam_dir = from_local_beam_vector(cbeam.component, local_beam_dir)
 
     beam = cbeam.component
 
-    if !(haskey(beam.polyhedron.planes, k))
+    if !has_plane(beam, k) 
         error(string("Cannot generate cutting plan for beam and key ", k))
     end
     
@@ -1294,10 +1326,6 @@ function cutting_plan(
     corners = [CornerPosition(corner, localize(beam.polyhedron.corners[corner])) for corner in loop]
     annotations = [@set annotation.position = localize(annotation.position) for annotation in get(beam.annotations, k, PersistentVector{Annotation}())]
     return beam_cutting_plan(k, beam.specs.flip_symmetric, corners, annotations, cbeam.index)
-end
-
-function cutting_plan(beam::ContextualBeam, k::PlaneKey)
-    return cutting_plan(beam, k, beam_dir(beam.component))
 end
 
 function lx_point(v)
@@ -1450,6 +1478,22 @@ struct BeamLayout
     plans::Vector{BeamCuttingPlan}
 end
 
+
+const stop_loop = [[0.0, 0.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, 0.0]]
+const loop_pushing_dir = [-1.0, 0.0]
+
+function push_plan_against_loop(ref_loop, plan_to_push, margin)
+    loop_to_push = cutting_plan_loop(plan_to_push)
+    amount = push_loop_against_loop(ref_loop, loop_to_push, loop_pushing_dir)
+    return transform(rigid_transform_from_translation((amount - margin)*loop_pushing_dir), plan_to_push)
+end
+
+function layout_from_one_plan(plan::BeamCuttingPlan, margin)
+    return BeamLayout(2*margin + plan_length(plan::BeamCuttingPlan),
+    Vector{BeamCuttingPlan}([push_plan_against_loop(stop_loop, plan, margin)]))
+end
+
+# Packs a vector of BeamCuttingPlan and returns a vector of BeamLayouts
 function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Number)
     n = length(plans)
     plan_map = Dict{Int32, BeamCuttingPlan}()
@@ -1458,8 +1502,6 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
     end
 
     result = Vector{BeamLayout}()    
-    stop_loop = [[0.0, 0.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, 0.0]]
-    dir = [-1.0, 0.0]
     
     current_beam = Vector{BeamCuttingPlan}()
     last_loop = stop_loop
@@ -1478,9 +1520,7 @@ function pack(plans::Vector{BeamCuttingPlan}, beam_length::Number, margin::Numbe
         for (k, plan) in plan_map
             genplans = generate_transformed_plans(plan)
             for gplan in genplans
-                loop = cutting_plan_loop(gplan)
-                amount = push_loop_against_loop(last_loop, loop, dir)
-                adjusted_plan = transform(rigid_transform_from_translation((amount - margin)*dir), gplan)
+                adjusted_plan = push_plan_against_loop(last_loop, gplan, margin)
                 new_length = plan_length(adjusted_plan)
                 new_right = right(adjusted_plan)
                 new_measures = (new_length, -new_right)
@@ -1947,28 +1987,66 @@ function cutting_plan_grouping_key(specs::BeamSpecs)
     return specs
 end
 
+function flatten_diagram_strategies!(base_spec::BeamSpecs, strategy::CompositeDiagramStrategy, dst::Vector{BeamSpecs})
+    for sub_strategy in strategy.strategies
+        flatten_diagram_strategies!(base_spec, sub_strategy, dst)
+    end
+end
+
+function flatten_diagram_strategies!(base_spec::BeamSpecs, strategy::BasicDiagramStrategy, dst::Vector{BeamSpecs})
+    push!(dst, set_diagram_strategies(base_spec, strategy))
+end
+
 function group_by_specs(beams::Vector{ContextualComponent{Beam}})
     dst = Dict{BeamSpecs, Vector{ContextualBeam}}()
     for cc in beams
         beam = cc.component
-        k = cutting_plan_grouping_key(beam.specs)
-        if !(haskey(dst, k))
-            dst[k] = Vector{ContextualBeam}()
+        flat_specs = Vector{BeamSpecs}()
+        flatten_diagram_strategies!(beam.specs, beam.specs.diagram_strategy, flat_specs)
+        for spec in flat_specs
+            k = cutting_plan_grouping_key(spec)
+            if !(haskey(dst, k))
+                dst[k] = Vector{ContextualBeam}()
+            end
+            push!(dst[k], cc)
         end
-        push!(dst[k], cc)
     end
     return dst
 end
 
-function make_diagrams(strategy::PackedDiagramStrategy, beam_specs::BeamSpecs, cbeams::Vector{ContextualBeam})
-    return pack([cutting_plan(cbeam, strategy.cutting_plan_key) for cbeam in cbeams],
-    beam_specs.length, strategy.margin)
+function make_diagrams(strategy::BasicDiagramStrategy, beam_specs::BeamSpecs, cbeams::Vector{ContextualBeam})
+    plan_key = strategy.cutting_plan_key
+    function cplan(cbeam)
+        return cutting_plan(cbeam, plan_key, strategy.diagram_x_dir)
+    end
+
+    function has_plane0(cbeam)
+        return has_plane(cbeam.component, plan_key)
+    end
+    
+    if strategy.mode == :packed
+        return pack([cplan(cbeam) for cbeam in cbeams if has_plane0(cbeam)], beam_specs.length, strategy.margin)
+    elseif strategy.mode == :individual || strategy.mode == :individual_first
+        all_layouts = [layout_from_one_plan(cplan(cbeam), strategy.margin) for cbeam in cbeams if has_plane0(cbeam)]
+        if strategy.mode == :individual_first
+            return [all_layouts[1]]
+        else
+            return all_layouts
+        end
+    else
+        error(string("Mode not recognized", strategy.mode))
+    end
+end
+
+function make_diagrams(strategy::CompositeDiagramStrategy, beam_specs::BeamSpecs, cbeams::Vector{ContextualBeam})
+    return [layout for child in strategy.strategies for layout in make_diagrams(child, beam_specs, cbeams)]
 end
 
 
 function pack_plans(grouped_beams::Dict{BeamSpecs, Vector{ContextualBeam}})
     dst = Dict{BeamSpecs, Vector{BeamLayout}}()
     for (beam_specs, contextual_beams) in grouped_beams
+        # Produce BeamLayouts for common beams with common spec
         dst[beam_specs] = make_diagrams(beam_specs.diagram_strategy, beam_specs, contextual_beams)
     end
     return dst
@@ -2054,12 +2132,16 @@ function layout_order(pair::Pair{BeamSpecs, Vector{BeamLayout}})
     return (beam_specs_order(pair[1]), length(pair[2]))
 end
 
+function title(s::BasicDiagramStrategy)
+    return @sprintf("diagram mode %s, plane %s", string(s.mode), string(s.cutting_plan_key))
+end
+
 function title(specs::BeamSpecs)
-    if specs.label == ""
-        return @sprintf("Beam dims %.3fx%.3fx%.3f", specs.Xsize, specs.Ysize, specs.length)
+    return string(if specs.label == ""
+        @sprintf("Beam dims %.3fx%.3fx%.3f", specs.Xsize, specs.Ysize, specs.length)
     else
-        return specs.label
-    end
+        specs.label
+    end, " with ", title(specs.diagram_strategy))
 end
 
 abstract type DocNode end

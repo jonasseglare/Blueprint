@@ -35,7 +35,7 @@
 | 9 | alignment, structure |
 
 
-## Square beam
+## Square beam with diagram mode packed, plane beam_X_lower
 
 Diagrams for nodes with these dimensions.
 
@@ -66,7 +66,33 @@ Diagrams for nodes with these dimensions.
 | 9 | alignment, structure |
 
 
-## Strong beam
+## Strong beam with diagram mode individual_first, plane close_inner
+
+Diagrams for nodes with these dimensions.
+
+### Layout 1/1
+
+
+| Beam | Label | X | Y | Length | Comment |
+|-|-|-|-|-|-|
+| 4 | d | 0.010 | -0.020 |  |  |
+| 4 | a | 0.010 | 0.020 |  |  |
+| 4 | A | 0.025 | -0.008 |  | Common drill, radius = 0.003 |
+| 4 | B | 0.025 | 0.008 |  | Common drill, radius = 0.003 |
+| 4 | c | 0.040 | -0.020 |  |  |
+| 4 | b | 0.040 | 0.020 |  |  |
+| 4 | Overall length |  |  | 0.030 |  |
+| 4 | Overall height |  |  | 0.040 |  |
+
+
+![diagram001.svg](diagram001.svg)
+
+| Index | Memberships |
+|-|-|
+| 4 | connecting_beams, structure |
+
+
+## Strong beam with diagram mode packed, plane beam_X_lower
 
 Diagrams for nodes with these dimensions.
 
@@ -97,7 +123,7 @@ Diagrams for nodes with these dimensions.
 | 6 | Overall length |  |  | 0.355 |  |
 
 
-![diagram001.svg](diagram001.svg)
+![diagram002.svg](diagram002.svg)
 
 | Index | Memberships |
 |-|-|
@@ -132,7 +158,7 @@ Diagrams for nodes with these dimensions.
 | 7 | Overall length |  |  | 0.355 |  |
 
 
-![diagram002.svg](diagram002.svg)
+![diagram003.svg](diagram003.svg)
 
 | Index | Memberships |
 |-|-|
@@ -159,7 +185,7 @@ Diagrams for nodes with these dimensions.
 | 5 | Overall length |  |  | 0.355 |  |
 
 
-![diagram003.svg](diagram003.svg)
+![diagram004.svg](diagram004.svg)
 
 | Index | Memberships |
 |-|-|
@@ -167,7 +193,7 @@ Diagrams for nodes with these dimensions.
 | 5 | connecting_beams, structure |
 
 
-## Plywood sheet
+## Plywood sheet with diagram mode packed, plane beam_Y_lower
 
 Diagrams for nodes with these dimensions.
 
@@ -184,7 +210,7 @@ Diagrams for nodes with these dimensions.
 | 0 | Overall length |  |  | 2.500 |  |
 
 
-![diagram004.svg](diagram004.svg)
+![diagram005.svg](diagram005.svg)
 
 | Index | Memberships |
 |-|-|
@@ -204,7 +230,7 @@ Diagrams for nodes with these dimensions.
 | 1 | Overall length |  |  | 2.500 |  |
 
 
-![diagram005.svg](diagram005.svg)
+![diagram006.svg](diagram006.svg)
 
 | Index | Memberships |
 |-|-|

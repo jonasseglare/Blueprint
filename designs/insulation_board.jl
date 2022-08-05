@@ -51,8 +51,8 @@ function shelf_cut(x)
     return bp.cut(left_cut, bp.cut(right_cut, x))
 end
 
-function supporting_beam(dir)
-    return bp.push_against(base, bp.orient_beam(bp.new_beam(strong_specs), dir, bp.local_y_dir))
+function supporting_beam(dir, specs=strong_specs)
+    return bp.push_against(base, bp.orient_beam(bp.new_beam(specs), dir, bp.local_y_dir))
 end
 
 function inner_insulation_board(offset)
@@ -70,7 +70,9 @@ function inner_insulation_board(offset)
     close_inner = bp.get_tangent_cutting_plane(:close_inner, close_beam, [0.0, 1.0, 0.0])
     far_inner = bp.get_tangent_cutting_plane(:far_inner, far_beam, [0.0, -1.0, 0.0])
 
-    connecting_beams = bp.with_memberships(bp.cut_many([close_inner, far_inner], bp.beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0]), 4)), :connecting_beams)
+    support_specs = bp.set_diagram_strategies(strong_specs, bp.default_diagram_strategy, bp.basic_diagram_strategy(:individual_first, :close_inner, bp.x_vector_3d))
+    
+    connecting_beams = bp.with_memberships(bp.cut_many([close_inner, far_inner], bp.beam_array_between_planes(left_cut.plane, right_cut.plane, supporting_beam([0.0, 1.0, 0.0], support_specs), 4)), :connecting_beams)
 
     x_drill_planes = bp.spaced_planes(bp.pinch_beams(connecting_beams, bp.x_vector_3d), 1)
     z_drill_planes = bp.spaced_planes(bp.pinch_component(connecting_beams, bp.z_vector_3d), 2, 0.7)

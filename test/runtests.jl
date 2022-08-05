@@ -458,7 +458,7 @@ end
     
 
     # Make a plan for that plane
-    plan = bp.cutting_plan(beam, k)
+    plan = bp.cutting_plan(beam, k, bp.local_beam_dir)
 
     @test 4 == length(plan.corners)
     @test 4 == length(plan.annotations)
